@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(workspaceId) {
+      return signedIn() && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function isOwner(workspaceId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if signedIn() && request.auth.uid == userId;
+
+      match /workspaces/{workspaceId} {
+        allow read, create, update, delete: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /workspaces/{workspaceId} {
+      // Any signed-in user can read a workspace shell so they can join by code.
+      // Lecture details and progress stay inside member-protected subcollections.
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(workspaceId);
+
+      match /members/{memberId} {
+        allow read: if isMember(workspaceId);
+        allow create: if signedIn()
+          && memberId == request.auth.uid
+          && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.joinCode == request.resource.data.joinCode;
+        allow update, delete: if isOwner(workspaceId) || (signedIn() && memberId == request.auth.uid);
+      }
+
+      match /lectures/{lectureId} {
+        allow read, create, update, delete: if isMember(workspaceId);
+      }
+
+      match /progress/{progressId} {
+        allow read: if isMember(workspaceId);
+        allow create, update: if isMember(workspaceId) && request.resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(workspaceId) || (isMember(workspaceId) && resource.data.userId == request.auth.uid);
+      }
+    }
+  }
+}
