@@ -1,4 +1,4 @@
-date,startTime,endTime,course,title,instructor,source
-2026-07-06,08:30,09:30,PATHOLOGY,"Histology of the Esophagus, Stomach and Intestines",Dr. D. Cawley,Template example
-2026-07-07,09:30,10:30,PATHOLOGY,"Histology of the Mouth and Salivary Glands",Dr. D. Stephen,Template example
-2026-07-07,10:30,11:30,PATHOLOGY,"LAB: Histology of the Mouth and Salivary Glands",Dr. D. Stephen,Template example
+date,startTime,endTime,course,title,instructor,source,exam,examDate,priority,lectureType,estimatedMinutes,boardResource,notesLink
+2026-07-06,08:30,09:30,PATHOLOGY,"Histology of the Esophagus, Stomach and Intestines",Dr. D. Cawley,Block 5,Pathology Exam 1,2026-07-14,high,lecture,60,Pathoma GI pathology,Canvas lecture link
+2026-07-06,09:30,10:30,ANATOMY,"Pre-Lab 1 Lecture: Abdomen and Anterior Abdominal Wall",Dr. M. Piscura,Block 5,Anatomy Practical 1,2026-07-20,medium,lab,75,First Aid abdomen anatomy,Lab manual link
+2026-07-07,10:30,11:30,CELL BIO/PHYSIO,"GI Motility",Dr. A. Kirby,Block 5,Cell Bio Exam 1,2026-07-21,medium,lecture,60,B&B GI motility,Notes link

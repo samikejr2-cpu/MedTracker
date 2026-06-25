@@ -21,7 +21,6 @@ function normalizeTimeValue(value) {
   const text = String(value || '').trim();
   if (!text) return '';
 
-  // Already in 24-hour format.
   const military = text.match(/^(\d{1,2}):(\d{2})$/);
   if (military) {
     const h = Number(military[1]);
@@ -46,11 +45,9 @@ function parseDateValue(value) {
   const text = String(value || '').trim();
   if (!text) return '';
 
-  // YYYY-MM-DD
   const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (iso) return toISODate(new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
 
-  // M/D/YYYY or M/D/YY
   const slash = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (slash) {
     let year = Number(slash[3]);
@@ -58,7 +55,6 @@ function parseDateValue(value) {
     return toISODate(new Date(year, Number(slash[1]) - 1, Number(slash[2])));
   }
 
-  // July 6, 2026 / July 6 2026
   const monthPattern = new RegExp(`^(${months.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,)?\\s+(\\d{4})$`, 'i');
   const monthMatch = text.match(monthPattern);
   if (monthMatch) {
@@ -125,6 +121,24 @@ function valueFrom(row, keys) {
   return '';
 }
 
+function normalizePriority(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return 'medium';
+  if (['high', 'high yield', 'urgent', 'exam-heavy', 'exam heavy', 'board relevant'].includes(text)) return 'high';
+  if (['low', 'skim', 'can skim'].includes(text)) return 'low';
+  return 'medium';
+}
+
+function normalizeLectureType(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return 'lecture';
+  if (text.includes('practical')) return 'practical';
+  if (text.includes('lab')) return 'lab';
+  if (text.includes('exam')) return 'exam';
+  if (text.includes('sdl')) return 'sdl';
+  return 'lecture';
+}
+
 export async function parseCalendarCsv(file) {
   const text = await file.text();
   const rows = parseCsv(text);
@@ -136,7 +150,14 @@ export async function parseCalendarCsv(file) {
     const course = valueFrom(row, ['course', 'class', 'subject area', 'discipline']);
     const title = valueFrom(row, ['title', 'lecture', 'lecture title', 'topic', 'subject']);
     const instructor = valueFrom(row, ['instructor', 'professor', 'faculty']);
-    const source = valueFrom(row, ['source', 'notes']);
+    const source = valueFrom(row, ['source', 'notes', 'block']);
+    const exam = valueFrom(row, ['exam', 'exam name', 'exam tag', 'test']);
+    const examDate = parseDateValue(valueFrom(row, ['examDate', 'exam date', 'test date']));
+    const priority = normalizePriority(valueFrom(row, ['priority', 'yield', 'importance']));
+    const lectureType = normalizeLectureType(valueFrom(row, ['lectureType', 'lecture type', 'type', 'category']));
+    const estimatedMinutes = Number(valueFrom(row, ['estimatedMinutes', 'estimated minutes', 'minutes', 'duration'])) || 60;
+    const boardResource = valueFrom(row, ['boardResource', 'board resource', 'resource', 'board link']);
+    const notesLink = valueFrom(row, ['notesLink', 'notes link', 'link', 'url']);
 
     return {
       date,
@@ -146,6 +167,13 @@ export async function parseCalendarCsv(file) {
       title: String(title || '').trim(),
       instructor: String(instructor || '').trim(),
       source: String(source || 'CSV import').trim(),
+      exam: String(exam || '').trim(),
+      examDate,
+      priority,
+      lectureType,
+      estimatedMinutes,
+      boardResource: String(boardResource || '').trim(),
+      notesLink: String(notesLink || '').trim(),
       rawLine: `CSV row ${row._rowNumber}`,
       _rowNumber: row._rowNumber
     };

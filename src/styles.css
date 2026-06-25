@@ -187,3 +187,166 @@ input:focus { border-color: rgba(96,165,250,.8); box-shadow: 0 0 0 3px rgba(59,1
     display: grid;
   }
 }
+
+/* Productivity expansion: daily plan, exams, priorities, weekly view, reports */
+select, textarea {
+  width: 100%;
+  border: 1px solid rgba(148,163,184,.24);
+  background: rgba(30,41,59,.85);
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  outline: none;
+}
+select:focus, textarea:focus {
+  border-color: rgba(96,165,250,.8);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.18);
+}
+.row-3, .form-row.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.productivity-stats { grid-template-columns: repeat(5, 1fr); }
+.plan-grid, .exam-grid, .catchup-grid, .report-grid { display: grid; gap: 14px; }
+.plan-grid { grid-template-columns: 0.8fr 0.7fr 1.5fr; }
+.exam-grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.catchup-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.report-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.plan-card, .exam-card, .catchup-day, .report-grid > div, .progress-row, .overdue-row {
+  background: rgba(2,6,23,.42);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+}
+.plan-card { display: grid; gap: 6px; }
+.plan-card span, .exam-card span, .report-grid span, .progress-row small, .catchup-day small { color: var(--muted); }
+.plan-card strong, .report-grid strong { font-size: 24px; }
+.recommendation-card strong { font-size: 16px; }
+.score-badge {
+  min-width: 120px;
+  text-align: center;
+  border: 1px solid rgba(56,189,248,.38);
+  background: rgba(56,189,248,.12);
+  color: #cffafe;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+}
+.progress-wrap {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.18);
+  background: rgba(15,23,42,.76);
+  margin-top: 10px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+}
+.progress-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.progress-row { display: grid; gap: 8px; margin-bottom: 10px; }
+.progress-row > div { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.exam-card {
+  color: #e6f3ff;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  cursor: pointer;
+}
+.exam-card strong { font-size: 20px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.priority-badge, .soft-badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid var(--border);
+  color: #dbeafe;
+  background: rgba(30,41,59,.58);
+}
+.priority-badge.high, .priority-high { border-color: rgba(248,113,113,.48); }
+.priority-badge.high { color: #fecaca; background: rgba(127,29,29,.26); }
+.priority-badge.medium, .priority-medium { border-color: rgba(251,191,36,.38); }
+.priority-badge.medium { color: #fef3c7; background: rgba(146,64,14,.20); }
+.priority-badge.low, .priority-low { border-color: rgba(34,197,94,.34); }
+.priority-badge.low { color: #bbf7d0; background: rgba(21,128,61,.18); }
+.resource-line {
+  color: #c7d2fe;
+  background: rgba(67,56,202,.14);
+  border: 1px solid rgba(129,140,248,.24);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin: 10px 0 0;
+  word-break: break-word;
+}
+.task-section { margin-top: 14px; }
+.task-section-title {
+  margin: 0 0 8px;
+  color: #93c5fd;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .18em;
+  font-weight: 900;
+}
+.overdue-list { display: grid; gap: 10px; }
+.overdue-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.overdue-row > button {
+  text-align: left;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  display: grid;
+  gap: 4px;
+  padding: 0;
+}
+.overdue-row span, .overdue-row small { color: var(--muted); }
+.overdue-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mini-lecture, .week-mini {
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 12px;
+  background: rgba(15,23,42,.72);
+  padding: 10px;
+  margin-top: 10px;
+}
+.mini-lecture span, .week-mini span { color: #67e8f9; font-size: 12px; font-weight: 900; }
+.mini-lecture p, .week-mini p { margin: 4px 0 0; color: #fff; font-size: 13px; }
+.week-grid { display: grid; grid-template-columns: repeat(7, minmax(165px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.week-day {
+  min-height: 190px;
+  border: 1px solid var(--border);
+  background: rgba(2,6,23,.36);
+  border-radius: 18px;
+  padding: 10px;
+}
+.week-day.active { border-color: rgba(96,165,250,.7); background: rgba(59,130,246,.12); }
+.week-day-header {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  display: grid;
+  gap: 4px;
+  padding: 0 0 8px;
+}
+.week-day-header small { color: var(--muted); }
+.week-items { display: grid; gap: 8px; }
+.week-mini { cursor: grab; }
+.week-mini:active { cursor: grabbing; }
+.productivity-preview-row { grid-template-columns: 145px 105px 105px 130px minmax(220px,1fr) 150px 110px 42px; }
+.report-panel strong { display: block; margin-top: 5px; }
+.plan-panel .overdue-card { cursor: pointer; }
+.lecture-card[draggable="true"] { cursor: grab; }
+.lecture-card[draggable="true"]:active { cursor: grabbing; }
+
+@media (max-width: 1180px) {
+  .productivity-stats { grid-template-columns: repeat(2, 1fr); }
+  .plan-grid, .progress-columns { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .row-3, .form-row.three { grid-template-columns: 1fr; }
+  .productivity-preview-row { grid-template-columns: 1fr 1fr; }
+  .productivity-preview-row input:nth-child(5), .productivity-preview-row input:nth-child(6) { grid-column: 1 / -1; }
+  .overdue-row { grid-template-columns: 1fr; }
+  .week-grid { grid-template-columns: repeat(7, 235px); }
+}
