@@ -1,49 +1,43 @@
-# Dr. Stephens Boards Tracker Patch
+# MedTracker Homepage Tabs Patch
 
-This patch reworks the Daily Question Goal feature into **Dr. Stephens Boards Tracker**.
+This patch reorganizes the app into a cleaner homepage with feature tabs.
 
-## Features included
+## What changed
 
-- Renames the dashboard feature to **Dr. Stephens Boards Tracker**
-- Adds a tracker date selector using both:
-  - a dropdown
-  - a calendar/date picker
-- Adds fields for:
-  - Planned questions
-  - Completed questions
-  - Number of questions correct
-  - Question source as free text
-  - Notes
-- Adds edit support after saving the tracker
-- Adds clear/reset for an individual date
-- Adds daily progress, accuracy, remaining questions, and weekly summary
-- Keeps the tracker synced through Firebase/Firestore
+- Adds a simple Home screen.
+- Adds feature tabs so only one tool opens at a time.
+- Tabs include:
+  - Home
+  - Today's Plan
+  - Focus Timer
+  - Dr. Stephens Boards Tracker
+  - Progress Bars
+  - Weekly View
+  - Weekly Report
+  - Selected Day
+  - All Saved Lectures
+- Keeps Import/Add Lectures available from the right-side quick menu.
+- Keeps the right-side Settings button.
+- Settings now controls which feature tabs appear and their order.
+- All Saved Lectures now opens as its own full library page instead of only appearing when a day has no lectures.
 
-## Files changed
+## Files to upload to GitHub
 
-Upload these files/folders into the root of your GitHub repo:
+Upload the contents of this patch folder to your GitHub repo root:
 
-- `src/App.jsx`
-- `src/styles.css`
-- `firestore.rules`
-- `PATCH_INSTRUCTIONS.md`
+- src/App.jsx
+- src/styles.css
+- PATCH_INSTRUCTIONS.md
 
-## Install steps
+GitHub should show that `src/App.jsx` and `src/styles.css` are being replaced.
 
-1. Go to GitHub repo: `samikejr2-cpu/MedTracker`
-2. Click **Add file → Upload files**
-3. Upload the contents of this patch folder, not the outer ZIP folder.
-4. Click **Commit changes**
-5. Go to Netlify → Deploys
-6. Click **Trigger deploy → Clear cache and deploy site**
-7. Wait for **Published**
-8. Open `https://medltracker.netlify.app`
-9. Hard refresh on PC with `Ctrl + Shift + R`
+## Deploy
 
-## Firebase rules
+After committing in GitHub, go to Netlify and run:
 
-If your app currently works with broad testing rules, this patch will still work.
+Deploys -> Trigger deploy -> Clear cache and deploy site
 
-If you use the stricter included rules, copy `firestore.rules` into:
+Then open your site and hard refresh:
 
-Firebase → Firestore Database → Rules → Publish
+- PC: Ctrl + Shift + R
+- iPad: close Safari completely and reopen the app link
