@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -46,6 +46,118 @@ const PRACTICAL_TASKS = [
 
 const PRIORITIES = ['high', 'medium', 'low'];
 const LECTURE_TYPES = ['lecture', 'sdl', 'lab', 'practical', 'exam'];
+
+const DEFAULT_DASHBOARD_WIDGETS = [
+  { id: 'todayPlan', label: "Today's Plan", enabled: true },
+  { id: 'pomodoro', label: 'Pomodoro Focus Timer', enabled: true },
+  { id: 'qbank', label: 'Board Questions Tracker', enabled: true },
+  { id: 'examCards', label: 'Exam Countdown + Readiness', enabled: true },
+  { id: 'overdue', label: 'Overdue Lectures', enabled: true },
+  { id: 'catchUp', label: 'Smart Catch-Up Planner', enabled: true },
+  { id: 'progress', label: 'Progress Bars', enabled: true },
+  { id: 'weeklyView', label: 'Weekly View', enabled: true },
+  { id: 'weeklyReport', label: 'Weekly Report', enabled: true },
+  { id: 'selectedDay', label: 'Selected Day Lectures', enabled: true },
+  { id: 'allLectures', label: 'All Saved Lectures Fallback', enabled: true },
+  { id: 'importer', label: 'CSV Import + Manual Lecture', enabled: true }
+];
+
+const THEME_PRESETS = {
+  midnight: {
+    name: 'Midnight Blue',
+    bg: '#070b14',
+    panel: 'rgba(15, 23, 42, 0.94)',
+    panel2: 'rgba(20, 31, 54, 0.88)',
+    accent: '#38bdf8',
+    blue: '#3b82f6',
+    purple: '#7c3aed',
+    cyan: '#2dd4bf',
+    orange: '#fb923c',
+    success: '#22c55e',
+    danger: '#f87171',
+    text: '#eef4ff',
+    muted: '#9fb0ce'
+  },
+  forest: {
+    name: 'Forest Green',
+    bg: '#06110d',
+    panel: 'rgba(10, 28, 21, 0.94)',
+    panel2: 'rgba(15, 45, 34, 0.9)',
+    accent: '#34d399',
+    blue: '#10b981',
+    purple: '#84cc16',
+    cyan: '#2dd4bf',
+    orange: '#f59e0b',
+    success: '#22c55e',
+    danger: '#fb7185',
+    text: '#ecfdf5',
+    muted: '#a7f3d0'
+  },
+  aubergine: {
+    name: 'Aubergine',
+    bg: '#140819',
+    panel: 'rgba(38, 18, 47, 0.94)',
+    panel2: 'rgba(58, 24, 70, 0.9)',
+    accent: '#f0abfc',
+    blue: '#a855f7',
+    purple: '#d946ef',
+    cyan: '#67e8f9',
+    orange: '#fb923c',
+    success: '#4ade80',
+    danger: '#fb7185',
+    text: '#fff7ff',
+    muted: '#e9d5ff'
+  },
+  slate: {
+    name: 'Clean Slate',
+    bg: '#0f172a',
+    panel: 'rgba(30, 41, 59, 0.94)',
+    panel2: 'rgba(51, 65, 85, 0.9)',
+    accent: '#e2e8f0',
+    blue: '#94a3b8',
+    purple: '#64748b',
+    cyan: '#cbd5e1',
+    orange: '#fbbf24',
+    success: '#86efac',
+    danger: '#fca5a5',
+    text: '#f8fafc',
+    muted: '#cbd5e1'
+  }
+};
+
+const DEFAULT_THEME = THEME_PRESETS.midnight;
+
+function safeStorageGet(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Local storage can fail in private browsing. The app should still work.
+  }
+}
+
+function useLocalStorageState(key, fallback) {
+  const [value, setValue] = useState(() => safeStorageGet(key, fallback));
+  useEffect(() => {
+    safeStorageSet(key, value);
+  }, [key, value]);
+  return [value, setValue];
+}
+
+function mergeWidgetSettings(saved) {
+  const savedMap = new Map((Array.isArray(saved) ? saved : []).map((item) => [item.id, item]));
+  const merged = DEFAULT_DASHBOARD_WIDGETS.map((item) => ({ ...item, ...(savedMap.get(item.id) || {}) }));
+  const unknown = (Array.isArray(saved) ? saved : []).filter((item) => item?.id && !DEFAULT_DASHBOARD_WIDGETS.some((known) => known.id === item.id));
+  return [...merged, ...unknown];
+}
 
 function tasksForLecture(lecture) {
   const typeText = `${lecture.lectureType || ''} ${lecture.title || ''} ${lecture.course || ''}`.toLowerCase();
@@ -1070,6 +1182,332 @@ function WeeklyReport({ selectedDate, lectures, progress }) {
   );
 }
 
+
+function BoardQuestionsTracker({ selectedDate, qbankDay, qbankDays, onSave }) {
+  const [draft, setDraft] = useState({ planned: 0, completed: 0, source: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const week = weekDates(selectedDate);
+  const weekRows = week.map((date) => qbankDays[date] || { date, planned: 0, completed: 0 });
+  const weekPlanned = weekRows.reduce((sum, row) => sum + (Number(row.planned) || 0), 0);
+  const weekCompleted = weekRows.reduce((sum, row) => sum + (Number(row.completed) || 0), 0);
+  const percent = weekPlanned ? Math.min(100, Math.round((weekCompleted / weekPlanned) * 100)) : 0;
+
+  useEffect(() => {
+    setDraft({
+      planned: qbankDay?.planned || 0,
+      completed: qbankDay?.completed || 0,
+      source: qbankDay?.source || '',
+      notes: qbankDay?.notes || ''
+    });
+    setMessage('');
+  }, [qbankDay, selectedDate]);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      await onSave(selectedDate, {
+        planned: Math.max(0, Number(draft.planned) || 0),
+        completed: Math.max(0, Number(draft.completed) || 0),
+        source: draft.source.trim(),
+        notes: draft.notes.trim()
+      });
+      setMessage('Question goal saved.');
+    } catch (err) {
+      setMessage(err.message || 'Could not save question tracker.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel qbank-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Board questions</p>
+          <h2>Daily question goal</h2>
+        </div>
+        <div className="score-badge">{weekCompleted}/{weekPlanned || 0} this week</div>
+      </div>
+      <div className="qbank-grid">
+        <form className="manual-form qbank-form" onSubmit={save}>
+          <h3>{niceDate(selectedDate, true)}</h3>
+          <div className="row-2">
+            <label>Planned questions<input type="number" min="0" value={draft.planned} onChange={(e) => setDraft({ ...draft, planned: e.target.value })} /></label>
+            <label>Completed questions<input type="number" min="0" value={draft.completed} onChange={(e) => setDraft({ ...draft, completed: e.target.value })} /></label>
+          </div>
+          <label>Question source<input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} placeholder="TrueLearn, UWorld, COMBANK, AMBOSS..." /></label>
+          <label>Notes<textarea value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Topic set, weakness, missed-question plan..." rows={3} /></label>
+          <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save question goal'}</button>
+          {message && <p className={message.includes('Could') ? 'error-text small' : 'success-text'}>{message}</p>}
+        </form>
+        <div className="qbank-summary">
+          <div className="plan-card">
+            <span>Selected day</span>
+            <strong>{Number(draft.completed) || 0}/{Number(draft.planned) || 0}</strong>
+          </div>
+          <div className="plan-card">
+            <span>Weekly target completion</span>
+            <strong>{percent}%</strong>
+            <ProgressBar value={percent} />
+          </div>
+          <div className="qbank-week-list">
+            {weekRows.map((row) => (
+              <div className="qbank-week-row" key={row.date}>
+                <span>{niceDate(row.date, true)}</span>
+                <strong>{Number(row.completed) || 0}/{Number(row.planned) || 0}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PomodoroTimer({ lectures, selectedDate }) {
+  const [mode, setMode] = useState('focus');
+  const [durations, setDurations] = useLocalStorageState('medtracker:pomodoro-durations', { focus: 25, short: 5, long: 15 });
+  const [secondsLeft, setSecondsLeft] = useState((durations.focus || 25) * 60);
+  const [running, setRunning] = useState(false);
+  const [immersiveOpen, setImmersiveOpen] = useState(false);
+  const [sessionCount, setSessionCount] = useLocalStorageState('medtracker:pomodoro-session-count', 0);
+  const [selectedLectureId, setSelectedLectureId] = useState('');
+  const [sessionNote, setSessionNote] = useState('');
+  const [customBackground, setCustomBackground] = useLocalStorageState('medtracker:pomodoro-background-image', '');
+  const intervalRef = useRef(null);
+
+  const modeMinutes = Number(durations[mode]) || (mode === 'focus' ? 25 : 5);
+  const todayLectures = lectures.filter((lecture) => lecture.date === selectedDate);
+  const selectedLecture = lectures.find((lecture) => lecture.id === selectedLectureId);
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  const timeLabel = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const backgroundStyle = customBackground ? { backgroundImage: `linear-gradient(120deg, rgba(3, 7, 18, 0.35), rgba(15, 23, 42, 0.5)), url(${customBackground})` } : undefined;
+
+  useEffect(() => {
+    setSecondsLeft(modeMinutes * 60);
+    setRunning(false);
+  }, [mode, modeMinutes]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    intervalRef.current = window.setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(intervalRef.current);
+          setRunning(false);
+          setSessionCount((count) => count + 1);
+          setSessionNote(`Session complete${selectedLecture ? `: ${selectedLecture.title}` : ''}.`);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(intervalRef.current);
+  }, [running, selectedLecture, setSessionCount]);
+
+  function resetTimer() {
+    setRunning(false);
+    setSecondsLeft(modeMinutes * 60);
+    setSessionNote('');
+  }
+
+  function startFocusSession() {
+    setRunning(true);
+    setImmersiveOpen(true);
+  }
+
+  function updateDuration(key, value) {
+    const next = { ...durations, [key]: Math.max(1, Number(value) || 1) };
+    setDurations(next);
+    if (key === mode) {
+      setRunning(false);
+      setSecondsLeft(next[key] * 60);
+    }
+  }
+
+  function handleBackgroundUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setSessionNote('Please upload an image file for your focus background.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCustomBackground(reader.result);
+      setSessionNote('Custom focus background saved on this device.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const timerControls = (
+    <>
+      <div className="timer-mode-row">
+        <button className={mode === 'focus' ? 'tab active' : 'tab'} onClick={() => setMode('focus')}>Focus</button>
+        <button className={mode === 'short' ? 'tab active' : 'tab'} onClick={() => setMode('short')}>Short break</button>
+        <button className={mode === 'long' ? 'tab active' : 'tab'} onClick={() => setMode('long')}>Long break</button>
+      </div>
+      <div className="timer-display">{timeLabel}</div>
+      <div className="timer-actions">
+        <button className="primary-btn" onClick={() => running ? setRunning(false) : startFocusSession()}>{running ? 'Pause' : 'Start focus mode'}</button>
+        <button className="ghost-btn" onClick={resetTimer}>Reset</button>
+      </div>
+      {sessionNote && <p className="success-text">{sessionNote}</p>}
+    </>
+  );
+
+  return (
+    <section className="panel pomodoro-panel">
+      {immersiveOpen && (
+        <div className="focus-immersion" style={backgroundStyle}>
+          <div className="focus-topbar">
+            <button className="ghost-btn focus-exit" onClick={() => setImmersiveOpen(false)}>Back to dashboard</button>
+            <span>{running ? 'Focus session running' : 'Focus session paused'}</span>
+          </div>
+          <div className="focus-card">
+            <p className="eyebrow">{mode === 'focus' ? 'Deep work' : mode === 'short' ? 'Short break' : 'Long break'}</p>
+            <div className="focus-timer-display">{timeLabel}</div>
+            {selectedLecture && <p className="focus-lecture">{selectedLecture.course ? `${selectedLecture.course}: ` : ''}{selectedLecture.title}</p>}
+            <div className="timer-actions centered">
+              <button className="primary-btn" onClick={() => setRunning((value) => !value)}>{running ? 'Pause' : 'Resume'}</button>
+              <button className="ghost-btn" onClick={resetTimer}>Reset</button>
+              <button className="ghost-btn" onClick={() => setImmersiveOpen(false)}>Keep timer, return</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Focus timer</p>
+          <h2>Pomodoro study session</h2>
+        </div>
+        <div className="score-badge">{sessionCount} session{sessionCount === 1 ? '' : 's'} logged</div>
+      </div>
+      <div className="pomodoro-grid">
+        <div className="timer-card nature-preview" style={backgroundStyle}>
+          {timerControls}
+          <p className="muted light-muted">Starting the timer opens a full-screen nature focus background with the timer over top.</p>
+        </div>
+        <div className="manual-form timer-settings">
+          <h3>Session settings</h3>
+          <label>Attach session to lecture
+            <select value={selectedLectureId} onChange={(e) => setSelectedLectureId(e.target.value)}>
+              <option value="">No lecture selected</option>
+              {todayLectures.map((lecture) => <option key={lecture.id} value={lecture.id}>{lecture.course ? `${lecture.course}: ` : ''}{lecture.title}</option>)}
+              {lectures.filter((lecture) => lecture.date !== selectedDate).slice(0, 30).map((lecture) => <option key={lecture.id} value={lecture.id}>{niceDate(lecture.date, true)} · {lecture.title}</option>)}
+            </select>
+          </label>
+          <div className="row-3">
+            <label>Focus min<input type="number" min="1" value={durations.focus} onChange={(e) => updateDuration('focus', e.target.value)} /></label>
+            <label>Short min<input type="number" min="1" value={durations.short} onChange={(e) => updateDuration('short', e.target.value)} /></label>
+            <label>Long min<input type="number" min="1" value={durations.long} onChange={(e) => updateDuration('long', e.target.value)} /></label>
+          </div>
+          <label>Upload focus background image
+            <input type="file" accept="image/*" onChange={handleBackgroundUpload} />
+          </label>
+          <div className="inline-actions no-margin">
+            <button type="button" className="ghost-btn small-btn" onClick={() => setCustomBackground('')}>Use default nature scene</button>
+            <button type="button" className="ghost-btn small-btn" onClick={() => setImmersiveOpen(true)}>Preview focus mode</button>
+          </div>
+          <p className="muted">Uploaded backgrounds save on this browser/device. Use this for lecture blocks, Anki, or board questions.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DashboardCustomizer({ widgets, setWidgets, theme, setTheme, open, setOpen }) {
+  function toggleWidget(id) {
+    setWidgets(widgets.map((item) => item.id === id ? { ...item, enabled: !item.enabled } : item));
+  }
+
+  function moveWidget(index, delta) {
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= widgets.length) return;
+    const next = [...widgets];
+    const [item] = next.splice(index, 1);
+    next.splice(nextIndex, 0, item);
+    setWidgets(next);
+  }
+
+  function resetWidgets() {
+    setWidgets(DEFAULT_DASHBOARD_WIDGETS);
+  }
+
+  function applyPreset(key) {
+    setTheme(THEME_PRESETS[key]);
+  }
+
+  function updateTheme(key, value) {
+    setTheme({ ...theme, [key]: value });
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="settings-overlay" onClick={() => setOpen(false)}>
+      <section className="settings-drawer panel customizer-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h2>Main page layout and colors</h2>
+          </div>
+          <button className="ghost-btn" onClick={() => setOpen(false)}>Close</button>
+        </div>
+        <div className="customizer-grid">
+          <div className="customizer-column">
+            <div className="panel-heading compact-heading">
+              <h3>Homepage sections</h3>
+              <button className="ghost-btn small-btn" onClick={resetWidgets}>Reset order</button>
+            </div>
+            <p className="muted">Choose what appears on the main page and use the arrows to reorder your dashboard.</p>
+            <div className="widget-sort-list">
+              {widgets.map((widget, index) => (
+                <div className={widget.enabled ? 'widget-sort-row' : 'widget-sort-row disabled'} key={widget.id}>
+                  <label className="check-chip">
+                    <input type="checkbox" checked={widget.enabled} onChange={() => toggleWidget(widget.id)} />
+                    <span>{widget.label}</span>
+                  </label>
+                  <div className="inline-actions no-margin">
+                    <button className="icon-btn" onClick={() => moveWidget(index, -1)} disabled={index === 0}>↑</button>
+                    <button className="icon-btn" onClick={() => moveWidget(index, 1)} disabled={index === widgets.length - 1}>↓</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="customizer-column">
+            <h3>Color theme</h3>
+            <p className="muted">Pick a preset or adjust the full app color palette.</p>
+            <div className="preset-row">
+              {Object.entries(THEME_PRESETS).map(([key, preset]) => (
+                <button className="ghost-btn small-btn" key={key} onClick={() => applyPreset(key)}>{preset.name}</button>
+              ))}
+            </div>
+            <div className="color-grid">
+              <label>Background<input type="color" value={theme.bg || DEFAULT_THEME.bg} onChange={(e) => updateTheme('bg', e.target.value)} /></label>
+              <label>Panel<input type="color" value={(theme.panel || '#0f172a').replace(/rgba?\((.*?)\)/, DEFAULT_THEME.bg)} onChange={(e) => updateTheme('panel', e.target.value)} /></label>
+              <label>Secondary panel<input type="color" value={(theme.panel2 || theme.panel || '#111827').replace(/rgba?\((.*?)\)/, DEFAULT_THEME.bg)} onChange={(e) => updateTheme('panel2', e.target.value)} /></label>
+              <label>Accent<input type="color" value={theme.accent || DEFAULT_THEME.accent} onChange={(e) => updateTheme('accent', e.target.value)} /></label>
+              <label>Button<input type="color" value={theme.blue || DEFAULT_THEME.blue} onChange={(e) => updateTheme('blue', e.target.value)} /></label>
+              <label>Purple<input type="color" value={theme.purple || DEFAULT_THEME.purple} onChange={(e) => updateTheme('purple', e.target.value)} /></label>
+              <label>Success<input type="color" value={theme.success || DEFAULT_THEME.success} onChange={(e) => updateTheme('success', e.target.value)} /></label>
+              <label>Danger<input type="color" value={theme.danger || DEFAULT_THEME.danger} onChange={(e) => updateTheme('danger', e.target.value)} /></label>
+              <label>Text<input type="color" value={theme.text || DEFAULT_THEME.text} onChange={(e) => updateTheme('text', e.target.value)} /></label>
+              <label>Muted text<input type="color" value={theme.muted || DEFAULT_THEME.muted} onChange={(e) => updateTheme('muted', e.target.value)} /></label>
+            </div>
+            <p className="muted">Dashboard layout and colors are saved per browser/device, so your PC and iPad can each have a different setup.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function findRecommendation(lectures, progress, selectedDate) {
   const incomplete = lectures.filter((lecture) => completionPercent(lecture, progress[lecture.id]) < 100);
   if (!incomplete.length) return null;
@@ -1102,6 +1540,12 @@ function Dashboard({ user, workspace }) {
   const [progress, setProgress] = useState({});
   const [dataError, setDataError] = useState('');
   const [members, setMembers] = useState([]);
+  const [qbankDays, setQbankDays] = useState({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const widgetKey = `medtracker:widgets:${user.uid}:${workspace.workspaceId}`;
+  const themeKey = `medtracker:theme:${user.uid}`;
+  const [widgets, setWidgets] = useLocalStorageState(widgetKey, DEFAULT_DASHBOARD_WIDGETS);
+  const [theme, setTheme] = useLocalStorageState(themeKey, DEFAULT_THEME);
 
   useEffect(() => {
     if (!workspace?.workspaceId) return undefined;
@@ -1136,6 +1580,39 @@ function Dashboard({ user, workspace }) {
       setMembers(snapshot.docs.map((item) => item.data()));
     });
   }, [workspace?.workspaceId]);
+
+  useEffect(() => {
+    setWidgets((current) => mergeWidgetSettings(current));
+  }, [widgetKey, setWidgets]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applied = { ...DEFAULT_THEME, ...(theme || {}) };
+    root.style.setProperty('--bg', applied.bg);
+    root.style.setProperty('--panel', applied.panel);
+    root.style.setProperty('--panel-2', applied.panel2 || applied.panel);
+    root.style.setProperty('--accent', applied.accent);
+    root.style.setProperty('--blue', applied.blue);
+    root.style.setProperty('--purple', applied.purple);
+    root.style.setProperty('--cyan', applied.cyan);
+    root.style.setProperty('--orange', applied.orange);
+    root.style.setProperty('--success', applied.success);
+    root.style.setProperty('--danger', applied.danger);
+    root.style.setProperty('--text', applied.text);
+    root.style.setProperty('--muted', applied.muted);
+  }, [theme]);
+
+  useEffect(() => {
+    if (!workspace?.workspaceId) return undefined;
+    return onSnapshot(collection(db, 'workspaces', workspace.workspaceId, 'qbankDays'), (snapshot) => {
+      const next = {};
+      snapshot.docs.forEach((item) => {
+        const data = item.data();
+        if (data.userId === user.uid && data.date) next[data.date] = data;
+      });
+      setQbankDays(next);
+    }, (err) => setDataError(err.message || 'Could not load question tracker.'));
+  }, [workspace?.workspaceId, user.uid]);
 
   const dates = useMemo(() => {
     const unique = Array.from(new Set(lectures.map((lecture) => lecture.date).filter(Boolean))).sort();
@@ -1178,6 +1655,17 @@ function Dashboard({ user, workspace }) {
     await deleteDoc(doc(db, 'workspaces', workspace.workspaceId, 'lectures', lectureId));
   }
 
+  async function saveQbankDay(date, patch) {
+    const current = qbankDays[date] || {};
+    await setDoc(doc(db, 'workspaces', workspace.workspaceId, 'qbankDays', `${user.uid}_${date}`), {
+      ...current,
+      ...patch,
+      userId: user.uid,
+      date,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  }
+
   function moveDay(delta) {
     setSelectedDate(shiftISODate(selectedDate, delta));
   }
@@ -1217,15 +1705,15 @@ function Dashboard({ user, workspace }) {
         <div className="stat-card"><span>Block completion</span><strong>{overall}%</strong></div>
       </section>
 
+      <aside className="right-action-menu" aria-label="Quick actions">
+        <button type="button" onClick={() => setSettingsOpen(true)}>⚙ Settings</button>
+        <button type="button" onClick={() => setSelectedDate(todayISO())}>Today</button>
+        <button type="button" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}>Import</button>
+      </aside>
+
       {dataError && <section className="panel warning-panel"><p className="error-text">{dataError}</p></section>}
 
-      <TodayPlan selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />
-      <ExamCards lectures={lectures} progress={progress} onSelectDate={setSelectedDate} />
-      <OverduePanel overdueLectures={overdueLectures} progress={progress} onSelectDate={setSelectedDate} onMoveLecture={moveLectureToDate} />
-      <SmartCatchUp overdueLectures={overdueLectures} progress={progress} />
-      <ProgressBreakdown lectures={lectures} progress={progress} />
-      <WeeklyView selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />
-      <WeeklyReport selectedDate={selectedDate} lectures={lectures} progress={progress} />
+      <DashboardCustomizer widgets={widgets} setWidgets={setWidgets} theme={theme} setTheme={setTheme} open={settingsOpen} setOpen={setSettingsOpen} />
 
       <section className="date-strip">
         {dates.map((date) => (
@@ -1235,49 +1723,61 @@ function Dashboard({ user, workspace }) {
         ))}
       </section>
 
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Selected day</p>
-            <h2>{dayLectures.length ? `${dayLectures.length} lecture${dayLectures.length === 1 ? '' : 's'}` : 'No lectures listed for this day'}</h2>
-          </div>
-        </div>
-        <div className="lecture-list">
-          {dayLectures.map((lecture) => (
-            <LectureCard
-              key={lecture.id}
-              lecture={lecture}
-              progress={progress[lecture.id]}
-              onToggle={toggleTask}
-              onDelete={deleteLecture}
-              onSave={updateLecture}
-              onMoveToDate={moveLectureToDate}
-              onDragStart={handleDragStart}
-            />
-          ))}
-        </div>
-      </section>
-
-      {dayLectures.length === 0 && lectures.length > 0 && (
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">All saved lectures</p>
-              <h2>Pick one of these dates to view lectures</h2>
+      {widgets.filter((widget) => widget.enabled).map((widget) => {
+        if (widget.id === 'todayPlan') return <TodayPlan key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
+        if (widget.id === 'pomodoro') return <PomodoroTimer key={widget.id} lectures={lectures} selectedDate={selectedDate} />;
+        if (widget.id === 'qbank') return <BoardQuestionsTracker key={widget.id} selectedDate={selectedDate} qbankDay={qbankDays[selectedDate]} qbankDays={qbankDays} onSave={saveQbankDay} />;
+        if (widget.id === 'examCards') return <ExamCards key={widget.id} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} />;
+        if (widget.id === 'overdue') return <OverduePanel key={widget.id} overdueLectures={overdueLectures} progress={progress} onSelectDate={setSelectedDate} onMoveLecture={moveLectureToDate} />;
+        if (widget.id === 'catchUp') return <SmartCatchUp key={widget.id} overdueLectures={overdueLectures} progress={progress} />;
+        if (widget.id === 'progress') return <ProgressBreakdown key={widget.id} lectures={lectures} progress={progress} />;
+        if (widget.id === 'weeklyView') return <WeeklyView key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
+        if (widget.id === 'weeklyReport') return <WeeklyReport key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} />;
+        if (widget.id === 'selectedDay') return (
+          <section className="panel" key={widget.id}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Selected day</p>
+                <h2>{dayLectures.length ? `${dayLectures.length} lecture${dayLectures.length === 1 ? '' : 's'}` : 'No lectures listed for this day'}</h2>
+              </div>
             </div>
-          </div>
-          <div className="all-lecture-list">
-            {lectures.slice(0, 40).map((lecture) => (
-              <button className="saved-lecture-row" key={lecture.id} onClick={() => setSelectedDate(lecture.date)}>
-                <span>{niceDate(lecture.date)}</span>
-                <strong>{timeLabel(lecture.startTime, lecture.endTime)} · {lecture.title}</strong>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <CsvImporter workspaceId={workspace.workspaceId} selectedDate={selectedDate} onSavedDate={setSelectedDate} />
+            <div className="lecture-list">
+              {dayLectures.map((lecture) => (
+                <LectureCard
+                  key={lecture.id}
+                  lecture={lecture}
+                  progress={progress[lecture.id]}
+                  onToggle={toggleTask}
+                  onDelete={deleteLecture}
+                  onSave={updateLecture}
+                  onMoveToDate={moveLectureToDate}
+                  onDragStart={handleDragStart}
+                />
+              ))}
+            </div>
+          </section>
+        );
+        if (widget.id === 'allLectures') return dayLectures.length === 0 && lectures.length > 0 ? (
+          <section className="panel" key={widget.id}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">All saved lectures</p>
+                <h2>Pick one of these dates to view lectures</h2>
+              </div>
+            </div>
+            <div className="all-lecture-list">
+              {lectures.slice(0, 40).map((lecture) => (
+                <button className="saved-lecture-row" key={lecture.id} onClick={() => setSelectedDate(lecture.date)}>
+                  <span>{niceDate(lecture.date)}</span>
+                  <strong>{timeLabel(lecture.startTime, lecture.endTime)} · {lecture.title}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null;
+        if (widget.id === 'importer') return <CsvImporter key={widget.id} workspaceId={workspace.workspaceId} selectedDate={selectedDate} onSavedDate={setSelectedDate} />;
+        return null;
+      })}
     </main>
   );
 }
