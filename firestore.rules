@@ -47,6 +47,12 @@ service cloud.firestore {
         allow create, update: if isMember(workspaceId) && request.resource.data.userId == request.auth.uid;
         allow delete: if isOwner(workspaceId) || (isMember(workspaceId) && resource.data.userId == request.auth.uid);
       }
+
+      match /qbankDays/{dayId} {
+        allow read: if isMember(workspaceId);
+        allow create, update: if isMember(workspaceId) && request.resource.data.userId == request.auth.uid;
+        allow delete: if isOwner(workspaceId) || (isMember(workspaceId) && resource.data.userId == request.auth.uid);
+      }
     }
   }
 }
