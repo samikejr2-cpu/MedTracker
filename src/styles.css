@@ -614,3 +614,239 @@ textarea { resize: vertical; min-height: 84px; }
   .focus-topbar { font-size: 13px; }
   .focus-card { border-radius: 24px; }
 }
+
+/* Daily Question Goal UX upgrade */
+.qbank-topline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 14px 0 16px;
+}
+.weekly-goal-card { gap: 8px; }
+.inline-goal-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.inline-goal-row input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(2,6,23,.52);
+  color: var(--text);
+  padding: 10px 12px;
+}
+.source-chip-row,
+.quick-add-row,
+.form-actions,
+.qbank-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.chip-btn,
+.quick-add-row button,
+.qbank-entry-actions button,
+.secondary-btn {
+  border: 1px solid rgba(148,163,184,.28);
+  border-radius: 999px;
+  background: rgba(15,23,42,.55);
+  color: var(--text);
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.chip-btn.active,
+.quick-add-row button:hover,
+.qbank-entry-actions button:hover,
+.secondary-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.standalone-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  background: rgba(15,23,42,.42);
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.standalone-check input { width: auto; }
+.qbank-entry-list {
+  display: grid;
+  gap: 12px;
+}
+.qbank-entry-card {
+  border: 1px solid rgba(148,163,184,.2);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15,23,42,.72), rgba(2,6,23,.48));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.qbank-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.review-pill {
+  border: 1px solid rgba(251,146,60,.4);
+  background: rgba(251,146,60,.12);
+  color: var(--orange);
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+.review-pill.done {
+  border-color: rgba(34,197,94,.38);
+  background: rgba(34,197,94,.12);
+  color: var(--success);
+}
+.qbank-notes {
+  margin: 0;
+  color: var(--muted);
+  font-size: .9rem;
+  line-height: 1.45;
+}
+.qbank-entry-actions .danger-btn.subtle {
+  background: rgba(248,113,113,.12);
+  border-color: rgba(248,113,113,.28);
+  color: var(--danger);
+}
+.qbank-week-list.enhanced .qbank-week-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto;
+}
+.qbank-week-list.enhanced .progress-bar {
+  grid-column: 1 / -1;
+}
+.small { font-size: .85rem; }
+@media (max-width: 900px) {
+  .qbank-topline { grid-template-columns: 1fr; }
+  .qbank-entry-head { flex-direction: column; }
+}
+
+/* Dr. Stephens Boards Tracker rework */
+.stephens-board-panel {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+.tracker-date-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 18px;
+  background: rgba(2,6,23,.28);
+}
+.tracker-date-controls label,
+.stephens-form label {
+  display: grid;
+  gap: 7px;
+}
+.tracker-date-controls select,
+.tracker-date-controls input,
+.stephens-form input,
+.stephens-form textarea {
+  width: 100%;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: rgba(2,6,23,.55);
+  color: var(--text);
+  padding: 11px 12px;
+}
+.stephens-topline {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+.stephens-tracker-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(300px, .9fr);
+  gap: 16px;
+  align-items: start;
+}
+.section-subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.row-3.compact-number-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+}
+.stephens-form input:disabled,
+.stephens-form textarea:disabled,
+.quick-add-row button:disabled {
+  opacity: .68;
+  cursor: not-allowed;
+}
+.summary-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+.summary-metric-grid div,
+.week-overview-card {
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 16px;
+  background: rgba(15,23,42,.52);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+.summary-metric-grid span,
+.week-overview-card span {
+  color: var(--muted);
+  font-size: .82rem;
+}
+.summary-metric-grid strong,
+.week-overview-card strong {
+  color: var(--text);
+  font-size: 1.35rem;
+}
+.source-display {
+  margin: 4px 0 12px;
+  color: var(--text);
+  font-weight: 800;
+}
+.qbank-notes.larger {
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148,163,184,.16);
+  border-radius: 14px;
+  background: rgba(2,6,23,.28);
+  white-space: pre-wrap;
+}
+.stephens-week-list .qbank-week-row {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.stephens-week-list .qbank-week-row.active {
+  border-color: color-mix(in srgb, var(--accent) 70%, white);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.stephens-week-list .qbank-week-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+@media (max-width: 900px) {
+  .tracker-date-controls,
+  .stephens-topline,
+  .stephens-tracker-grid,
+  .row-3.compact-number-row,
+  .summary-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}

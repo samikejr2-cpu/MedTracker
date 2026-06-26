@@ -1,51 +1,49 @@
-# MedTracker Focus + Customization Patch
+# Dr. Stephens Boards Tracker Patch
 
-This patch adds:
+This patch reworks the Daily Question Goal feature into **Dr. Stephens Boards Tracker**.
 
-- Pomodoro focus timer
-- Full-screen nature focus mode while the timer runs
-- Optional uploaded focus background image
-- Daily board-question tracker: planned questions, completed questions, source, notes
-- Right-side Settings menu
-- Custom homepage section visibility and order
-- Full app color customization
+## Features included
 
-## How to apply through GitHub
+- Renames the dashboard feature to **Dr. Stephens Boards Tracker**
+- Adds a tracker date selector using both:
+  - a dropdown
+  - a calendar/date picker
+- Adds fields for:
+  - Planned questions
+  - Completed questions
+  - Number of questions correct
+  - Question source as free text
+  - Notes
+- Adds edit support after saving the tracker
+- Adds clear/reset for an individual date
+- Adds daily progress, accuracy, remaining questions, and weekly summary
+- Keeps the tracker synced through Firebase/Firestore
 
-1. Extract this ZIP.
-2. Open the extracted folder named `medtracker_focus_changed_files`.
-3. Go to your GitHub repo.
-4. Click **Add file → Upload files**.
-5. Drag these items into GitHub:
-   - `src`
-   - `firestore.rules`
-   - `PATCH_INSTRUCTIONS.md`
-6. GitHub should say it is replacing `src/App.jsx` and `src/styles.css`.
-7. Click **Commit changes**.
-8. Go to Netlify → Deploys.
-9. Click **Trigger deploy → Clear cache and deploy site**.
-10. Wait until the deploy says **Published**.
-11. Open your app and hard refresh.
+## Files changed
 
-## If you use stricter Firestore rules
+Upload these files/folders into the root of your GitHub repo:
 
-Copy the included `firestore.rules` into Firebase:
+- `src/App.jsx`
+- `src/styles.css`
+- `firestore.rules`
+- `PATCH_INSTRUCTIONS.md`
 
-Firebase → Firestore Database → Rules → paste → Publish
+## Install steps
 
-If you are still using the broad testing rule that allows any signed-in user to read/write, this step is optional.
+1. Go to GitHub repo: `samikejr2-cpu/MedTracker`
+2. Click **Add file → Upload files**
+3. Upload the contents of this patch folder, not the outer ZIP folder.
+4. Click **Commit changes**
+5. Go to Netlify → Deploys
+6. Click **Trigger deploy → Clear cache and deploy site**
+7. Wait for **Published**
+8. Open `https://medltracker.netlify.app`
+9. Hard refresh on PC with `Ctrl + Shift + R`
 
-## How to confirm the patch is live
+## Firebase rules
 
-In the live app, you should see a floating right-side menu with:
+If your app currently works with broad testing rules, this patch will still work.
 
-- Settings
-- Today
-- Import
+If you use the stricter included rules, copy `firestore.rules` into:
 
-The dashboard should include:
-
-- Pomodoro study session
-- Daily board-question goal
-
-Starting the Pomodoro timer should open a full-screen nature background with the timer on top.
+Firebase → Firestore Database → Rules → Publish

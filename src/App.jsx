@@ -50,7 +50,7 @@ const LECTURE_TYPES = ['lecture', 'sdl', 'lab', 'practical', 'exam'];
 const DEFAULT_DASHBOARD_WIDGETS = [
   { id: 'todayPlan', label: "Today's Plan", enabled: true },
   { id: 'pomodoro', label: 'Pomodoro Focus Timer', enabled: true },
-  { id: 'qbank', label: 'Board Questions Tracker', enabled: true },
+  { id: 'qbank', label: 'Dr. Stephens Boards Tracker', enabled: true },
   { id: 'examCards', label: 'Exam Countdown + Readiness', enabled: true },
   { id: 'overdue', label: 'Overdue Lectures', enabled: true },
   { id: 'catchUp', label: 'Smart Catch-Up Planner', enabled: true },
@@ -1183,83 +1183,278 @@ function WeeklyReport({ selectedDate, lectures, progress }) {
 }
 
 
-function BoardQuestionsTracker({ selectedDate, qbankDay, qbankDays, onSave }) {
-  const [draft, setDraft] = useState({ planned: 0, completed: 0, source: '', notes: '' });
+function numberOrZero(value) {
+  return Math.max(0, Number(value) || 0);
+}
+
+function normalizeBoardsTrackerDay(day) {
+  if (!day) {
+    return { planned: 0, completed: 0, correct: 0, source: '', notes: '', hasData: false };
+  }
+
+  const direct = {
+    planned: numberOrZero(day.planned),
+    completed: numberOrZero(day.completed),
+    correct: numberOrZero(day.correct),
+    source: day.source || '',
+    notes: day.notes || '',
+    hasData: Boolean(
+      day.source ||
+      day.notes ||
+      numberOrZero(day.planned) ||
+      numberOrZero(day.completed) ||
+      numberOrZero(day.correct)
+    )
+  };
+
+  if (direct.hasData) return direct;
+
+  if (Array.isArray(day.entries) && day.entries.length) {
+    const planned = day.entries.reduce((sum, entry) => sum + numberOrZero(entry.planned), 0);
+    const completed = day.entries.reduce((sum, entry) => sum + numberOrZero(entry.completed), 0);
+    const correct = day.entries.reduce((sum, entry) => sum + numberOrZero(entry.correct), 0);
+    const sources = [...new Set(day.entries.map((entry) => entry.source).filter(Boolean))].join(', ');
+    const notes = day.entries.map((entry) => entry.notes).filter(Boolean).join('\n');
+    return { planned, completed, correct, source: sources, notes, hasData: Boolean(planned || completed || correct || sources || notes) };
+  }
+
+  return direct;
+}
+
+function qbankTotals(day) {
+  const record = normalizeBoardsTrackerDay(day);
+  return {
+    planned: record.planned,
+    completed: record.completed,
+    correct: record.correct,
+    accuracy: record.completed ? Math.round((record.correct / record.completed) * 100) : 0,
+    hasData: record.hasData
+  };
+}
+
+function DrStephensBoardsTracker({ selectedDate, qbankDays, onSave }) {
+  const blankDraft = { planned: '', completed: '', correct: '', source: '', notes: '' };
+  const [trackerDate, setTrackerDate] = useState(selectedDate || todayISO());
+  const [draft, setDraft] = useState(blankDraft);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const week = weekDates(selectedDate);
-  const weekRows = week.map((date) => qbankDays[date] || { date, planned: 0, completed: 0 });
-  const weekPlanned = weekRows.reduce((sum, row) => sum + (Number(row.planned) || 0), 0);
-  const weekCompleted = weekRows.reduce((sum, row) => sum + (Number(row.completed) || 0), 0);
-  const percent = weekPlanned ? Math.min(100, Math.round((weekCompleted / weekPlanned) * 100)) : 0;
+
+  const activeDay = qbankDays[trackerDate];
+  const record = normalizeBoardsTrackerDay(activeDay);
+  const today = todayISO();
+  const currentWeek = weekDates(trackerDate);
+  const weekRows = currentWeek.map((date) => ({ date, ...qbankTotals(qbankDays[date]) }));
+  const weekPlanned = weekRows.reduce((sum, row) => sum + row.planned, 0);
+  const weekCompleted = weekRows.reduce((sum, row) => sum + row.completed, 0);
+  const weekCorrect = weekRows.reduce((sum, row) => sum + row.correct, 0);
+  const todayPercent = record.planned ? Math.min(100, Math.round((record.completed / record.planned) * 100)) : 0;
+  const accuracy = record.completed ? Math.round((record.correct / record.completed) * 100) : 0;
+  const remaining = Math.max(0, record.planned - record.completed);
+  const weeklyPercent = weekPlanned ? Math.min(100, Math.round((weekCompleted / weekPlanned) * 100)) : 0;
+  const weeklyAccuracy = weekCompleted ? Math.round((weekCorrect / weekCompleted) * 100) : 0;
+
+  const dateOptions = [
+    { label: `Today — ${niceDate(today, true)}`, value: today },
+    { label: `Selected app date — ${niceDate(selectedDate, true)}`, value: selectedDate },
+    ...weekDates(selectedDate).map((date) => ({ label: niceDate(date, true), value: date }))
+  ].filter((item, index, arr) => item.value && arr.findIndex((candidate) => candidate.value === item.value) === index);
 
   useEffect(() => {
-    setDraft({
-      planned: qbankDay?.planned || 0,
-      completed: qbankDay?.completed || 0,
-      source: qbankDay?.source || '',
-      notes: qbankDay?.notes || ''
-    });
+    setTrackerDate(selectedDate || todayISO());
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const current = normalizeBoardsTrackerDay(qbankDays[trackerDate]);
+    if (current.hasData) {
+      setDraft({
+        planned: current.planned || '',
+        completed: current.completed || '',
+        correct: current.correct || '',
+        source: current.source || '',
+        notes: current.notes || ''
+      });
+      setEditing(false);
+    } else {
+      setDraft(blankDraft);
+      setEditing(true);
+    }
     setMessage('');
-  }, [qbankDay, selectedDate]);
+  }, [trackerDate, qbankDays]);
+
+  function updateDraft(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function quickComplete(amount) {
+    setEditing(true);
+    setDraft((current) => {
+      const planned = numberOrZero(current.planned);
+      const completed = amount === 'complete' ? planned : numberOrZero(current.completed) + amount;
+      return { ...current, completed };
+    });
+  }
 
   async function save(e) {
     e.preventDefault();
     setSaving(true);
     setMessage('');
+    const planned = numberOrZero(draft.planned);
+    const completed = numberOrZero(draft.completed);
+    const correct = Math.min(numberOrZero(draft.correct), completed || numberOrZero(draft.correct));
+
     try {
-      await onSave(selectedDate, {
-        planned: Math.max(0, Number(draft.planned) || 0),
-        completed: Math.max(0, Number(draft.completed) || 0),
+      await onSave(trackerDate, {
+        planned,
+        completed,
+        correct,
         source: draft.source.trim(),
-        notes: draft.notes.trim()
+        notes: draft.notes.trim(),
+        entries: [],
+        trackerName: 'Dr. Stephens Boards Tracker'
       });
-      setMessage('Question goal saved.');
+      setEditing(false);
+      setMessage('Dr. Stephens Boards Tracker saved. You can edit it any time.');
     } catch (err) {
-      setMessage(err.message || 'Could not save question tracker.');
+      setMessage(err.message || 'Could not save boards tracker.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearDay() {
+    if (!window.confirm(`Clear Dr. Stephens Boards Tracker for ${niceDate(trackerDate, true)}?`)) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      await onSave(trackerDate, {
+        planned: 0,
+        completed: 0,
+        correct: 0,
+        source: '',
+        notes: '',
+        entries: [],
+        trackerName: 'Dr. Stephens Boards Tracker'
+      });
+      setDraft(blankDraft);
+      setEditing(true);
+      setMessage('Tracker cleared for this date.');
+    } catch (err) {
+      setMessage(err.message || 'Could not clear tracker.');
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <section className="panel qbank-panel">
+    <section className="panel qbank-panel stephens-board-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Board questions</p>
-          <h2>Daily question goal</h2>
+          <h2>Dr. Stephens Boards Tracker</h2>
         </div>
         <div className="score-badge">{weekCompleted}/{weekPlanned || 0} this week</div>
       </div>
-      <div className="qbank-grid">
-        <form className="manual-form qbank-form" onSubmit={save}>
-          <h3>{niceDate(selectedDate, true)}</h3>
-          <div className="row-2">
-            <label>Planned questions<input type="number" min="0" value={draft.planned} onChange={(e) => setDraft({ ...draft, planned: e.target.value })} /></label>
-            <label>Completed questions<input type="number" min="0" value={draft.completed} onChange={(e) => setDraft({ ...draft, completed: e.target.value })} /></label>
+
+      <div className="tracker-date-controls">
+        <label>
+          Choose tracker date
+          <select value={trackerDate} onChange={(e) => setTrackerDate(e.target.value)}>
+            {dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Calendar date
+          <input type="date" value={trackerDate} onChange={(e) => setTrackerDate(e.target.value || todayISO())} />
+        </label>
+      </div>
+
+      <div className="qbank-topline stephens-topline">
+        <div className="plan-card">
+          <span>Planned</span>
+          <strong>{record.planned}</strong>
+          <small>{niceDate(trackerDate, true)}</small>
+        </div>
+        <div className="plan-card">
+          <span>Completed</span>
+          <strong>{record.completed}/{record.planned || 0}</strong>
+          <ProgressBar value={todayPercent} />
+        </div>
+        <div className="plan-card">
+          <span>Correct</span>
+          <strong>{record.correct}</strong>
+          <small>{record.completed ? `${accuracy}% correct` : 'Accuracy appears after completed questions are entered'}</small>
+        </div>
+        <div className="plan-card">
+          <span>Remaining</span>
+          <strong>{remaining}</strong>
+          <small>{record.source || 'No source entered yet'}</small>
+        </div>
+      </div>
+
+      <div className="stephens-tracker-grid">
+        <form className="manual-form stephens-form" onSubmit={save}>
+          <div className="section-subhead">
+            <h3>{record.hasData && !editing ? 'Saved tracker' : record.hasData ? 'Edit saved tracker' : 'Create tracker for this date'}</h3>
+            {record.hasData && !editing && <button type="button" className="secondary-btn" onClick={() => setEditing(true)}>Edit saved goal</button>}
           </div>
-          <label>Question source<input value={draft.source} onChange={(e) => setDraft({ ...draft, source: e.target.value })} placeholder="TrueLearn, UWorld, COMBANK, AMBOSS..." /></label>
-          <label>Notes<textarea value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Topic set, weakness, missed-question plan..." rows={3} /></label>
-          <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save question goal'}</button>
+
+          <div className="row-3 compact-number-row">
+            <label>Planned questions<input type="number" min="0" value={draft.planned} disabled={record.hasData && !editing} onChange={(e) => updateDraft('planned', e.target.value)} placeholder="40" /></label>
+            <label>Completed questions<input type="number" min="0" value={draft.completed} disabled={record.hasData && !editing} onChange={(e) => updateDraft('completed', e.target.value)} placeholder="0" /></label>
+            <label>Questions correct<input type="number" min="0" value={draft.correct} disabled={record.hasData && !editing} onChange={(e) => updateDraft('correct', e.target.value)} placeholder="0" /></label>
+          </div>
+
+          <div className="quick-add-row">
+            <button type="button" disabled={record.hasData && !editing} onClick={() => quickComplete(5)}>+5 completed</button>
+            <button type="button" disabled={record.hasData && !editing} onClick={() => quickComplete(10)}>+10 completed</button>
+            <button type="button" disabled={record.hasData && !editing} onClick={() => quickComplete(20)}>+20 completed</button>
+            <button type="button" disabled={record.hasData && !editing} onClick={() => quickComplete('complete')}>Mark complete</button>
+          </div>
+
+          <label>Question source<input value={draft.source} disabled={record.hasData && !editing} onChange={(e) => updateDraft('source', e.target.value)} placeholder="TrueLearn GI, UWorld Renal, COMBANK OMM, AMBOSS, Bootcamp..." /></label>
+          <label>Notes<textarea value={draft.notes} disabled={record.hasData && !editing} onChange={(e) => updateDraft('notes', e.target.value)} placeholder="Question set topic, weak areas, missed-question plan, timing notes..." rows={5} /></label>
+
+          <div className="form-actions">
+            {(editing || !record.hasData) && <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : record.hasData ? 'Update Dr. Stephens Boards Tracker' : 'Save Dr. Stephens Boards Tracker'}</button>}
+            {record.hasData && editing && <button type="button" className="secondary-btn" onClick={() => { setEditing(false); setDraft({ planned: record.planned || '', completed: record.completed || '', correct: record.correct || '', source: record.source || '', notes: record.notes || '' }); }}>Cancel edit</button>}
+            {record.hasData && <button type="button" className="danger-btn subtle" onClick={clearDay} disabled={saving}>Clear this date</button>}
+          </div>
           {message && <p className={message.includes('Could') ? 'error-text small' : 'success-text'}>{message}</p>}
         </form>
-        <div className="qbank-summary">
-          <div className="plan-card">
-            <span>Selected day</span>
-            <strong>{Number(draft.completed) || 0}/{Number(draft.planned) || 0}</strong>
+
+        <div className="qbank-summary stephens-summary">
+          <h3>Selected date summary</h3>
+          <div className="summary-metric-grid">
+            <div><span>Progress</span><strong>{todayPercent}%</strong></div>
+            <div><span>Accuracy</span><strong>{record.completed ? `${accuracy}%` : '—'}</strong></div>
+            <div><span>Remaining</span><strong>{remaining}</strong></div>
           </div>
-          <div className="plan-card">
-            <span>Weekly target completion</span>
-            <strong>{percent}%</strong>
-            <ProgressBar value={percent} />
-          </div>
-          <div className="qbank-week-list">
-            {weekRows.map((row) => (
-              <div className="qbank-week-row" key={row.date}>
-                <span>{niceDate(row.date, true)}</span>
-                <strong>{Number(row.completed) || 0}/{Number(row.planned) || 0}</strong>
-              </div>
-            ))}
+          <p className="muted small">Source</p>
+          <p className="source-display">{record.source || 'No source saved yet.'}</p>
+          <p className="muted small">Notes</p>
+          <p className="qbank-notes larger">{record.notes || 'No notes saved yet.'}</p>
+
+          <div className="qbank-week-list enhanced stephens-week-list">
+            <h3>This week</h3>
+            <div className="week-overview-card">
+              <span>Weekly completion</span>
+              <strong>{weekCompleted}/{weekPlanned || 0}</strong>
+              <ProgressBar value={weeklyPercent} />
+              <small>{weekCompleted ? `${weeklyAccuracy}% correct this week` : 'No questions completed this week yet'}</small>
+            </div>
+            {weekRows.map((row) => {
+              const rowPercent = row.planned ? Math.min(100, Math.round((row.completed / row.planned) * 100)) : 0;
+              const rowAccuracy = row.completed ? Math.round((row.correct / row.completed) * 100) : null;
+              return (
+                <button type="button" className={row.date === trackerDate ? 'qbank-week-row active' : 'qbank-week-row'} key={row.date} onClick={() => setTrackerDate(row.date)}>
+                  <span>{niceDate(row.date, true)}</span>
+                  <strong>{row.completed}/{row.planned}</strong>
+                  <ProgressBar value={rowPercent} />
+                  <small>{rowAccuracy === null ? 'No accuracy yet' : `${row.correct} correct · ${rowAccuracy}%`}</small>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1726,7 +1921,7 @@ function Dashboard({ user, workspace }) {
       {widgets.filter((widget) => widget.enabled).map((widget) => {
         if (widget.id === 'todayPlan') return <TodayPlan key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
         if (widget.id === 'pomodoro') return <PomodoroTimer key={widget.id} lectures={lectures} selectedDate={selectedDate} />;
-        if (widget.id === 'qbank') return <BoardQuestionsTracker key={widget.id} selectedDate={selectedDate} qbankDay={qbankDays[selectedDate]} qbankDays={qbankDays} onSave={saveQbankDay} />;
+        if (widget.id === 'qbank') return <DrStephensBoardsTracker key={widget.id} selectedDate={selectedDate} qbankDays={qbankDays} onSave={saveQbankDay} />;
         if (widget.id === 'examCards') return <ExamCards key={widget.id} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} />;
         if (widget.id === 'overdue') return <OverduePanel key={widget.id} overdueLectures={overdueLectures} progress={progress} onSelectDate={setSelectedDate} onMoveLecture={moveLectureToDate} />;
         if (widget.id === 'catchUp') return <SmartCatchUp key={widget.id} overdueLectures={overdueLectures} progress={progress} />;
