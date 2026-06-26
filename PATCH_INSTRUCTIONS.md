@@ -1,43 +1,31 @@
-# MedTracker Homepage Tabs Patch
+# MedTracker Homepage Portal Patch
 
-This patch reorganizes the app into a cleaner homepage with feature tabs.
+This patch makes the app open to a simple homepage with one introduction tab and feature cards for every tool.
 
 ## What changed
 
-- Adds a simple Home screen.
-- Adds feature tabs so only one tool opens at a time.
-- Tabs include:
-  - Home
-  - Today's Plan
-  - Focus Timer
-  - Dr. Stephens Boards Tracker
-  - Progress Bars
-  - Weekly View
-  - Weekly Report
-  - Selected Day
-  - All Saved Lectures
-- Keeps Import/Add Lectures available from the right-side quick menu.
-- Keeps the right-side Settings button.
-- Settings now controls which feature tabs appear and their order.
-- All Saved Lectures now opens as its own full library page instead of only appearing when a day has no lectures.
+- The dashboard now starts on a clean **Introduction** homepage.
+- The horizontal feature-tab strip was removed from the main page to reduce clutter.
+- Every feature opens from a homepage card.
+- Each feature page has a simple **← Homepage** button.
+- The right-side menu still includes Settings, Today, and Import.
+- Settings still controls which homepage feature cards appear and what order they appear in.
 
-## Files to upload to GitHub
+## Files changed
 
-Upload the contents of this patch folder to your GitHub repo root:
+Upload these to GitHub:
 
-- src/App.jsx
-- src/styles.css
-- PATCH_INSTRUCTIONS.md
+- `src/App.jsx`
+- `src/styles.css`
+- `PATCH_INSTRUCTIONS.md`
 
-GitHub should show that `src/App.jsx` and `src/styles.css` are being replaced.
+## Install steps
 
-## Deploy
-
-After committing in GitHub, go to Netlify and run:
-
-Deploys -> Trigger deploy -> Clear cache and deploy site
-
-Then open your site and hard refresh:
-
-- PC: Ctrl + Shift + R
-- iPad: close Safari completely and reopen the app link
+1. Go to your GitHub repo.
+2. Click **Add file → Upload files**.
+3. Drag in the `src` folder and `PATCH_INSTRUCTIONS.md` from this patch.
+4. Commit changes.
+5. Go to Netlify.
+6. Click **Deploys → Trigger deploy → Clear cache and deploy site**.
+7. Wait for **Published**.
+8. Open your app and hard refresh.
