@@ -1,49 +1,44 @@
-# Dr. Stephens Boards Tracker Patch
+# MedTracker One-Feature Homepage Patch
 
-This patch reworks the Daily Question Goal feature into **Dr. Stephens Boards Tracker**.
+This patch redesigns the dashboard so the app opens to a clean homepage with an introduction and feature cards. Each feature opens one at a time instead of showing every dashboard section on one long page.
 
-## Features included
+## Features
 
-- Renames the dashboard feature to **Dr. Stephens Boards Tracker**
-- Adds a tracker date selector using both:
-  - a dropdown
-  - a calendar/date picker
-- Adds fields for:
-  - Planned questions
-  - Completed questions
-  - Number of questions correct
-  - Question source as free text
-  - Notes
-- Adds edit support after saving the tracker
-- Adds clear/reset for an individual date
-- Adds daily progress, accuracy, remaining questions, and weekly summary
-- Keeps the tracker synced through Firebase/Firestore
+- Simple homepage / introduction screen
+- Feature cards for:
+  - Today's Plan
+  - Focus Timer
+  - Dr. Stephens Boards Tracker
+  - Exam Countdown + Readiness
+  - Overdue Lectures
+  - Smart Catch-Up Planner
+  - Progress Bars
+  - Weekly View
+  - Weekly Report
+  - Selected Day Lectures
+  - All Saved Lectures
+  - Import / Add Lectures
+- "← Homepage" button on every feature view
+- Right-side menu still includes Settings, Today, and Import
+- Settings still controls which homepage cards appear and the order of those cards
+- Build-tested successfully
 
-## Files changed
+## Install
 
-Upload these files/folders into the root of your GitHub repo:
+1. Extract this ZIP.
+2. Open your GitHub repository.
+3. Click **Add file → Upload files**.
+4. Upload the `src` folder and this `PATCH_INSTRUCTIONS.md` file from inside the extracted folder.
+5. Commit changes.
+6. In Netlify, run **Deploys → Trigger deploy → Clear cache and deploy site**.
+7. After Netlify says **Published**, open `https://medltracker.netlify.app` and hard refresh.
 
-- `src/App.jsx`
-- `src/styles.css`
-- `firestore.rules`
-- `PATCH_INSTRUCTIONS.md`
+## Notes
 
-## Install steps
+If Netlify secrets scanning fails, keep these environment variables in Netlify:
 
-1. Go to GitHub repo: `samikejr2-cpu/MedTracker`
-2. Click **Add file → Upload files**
-3. Upload the contents of this patch folder, not the outer ZIP folder.
-4. Click **Commit changes**
-5. Go to Netlify → Deploys
-6. Click **Trigger deploy → Clear cache and deploy site**
-7. Wait for **Published**
-8. Open `https://medltracker.netlify.app`
-9. Hard refresh on PC with `Ctrl + Shift + R`
+- `SECRETS_SCAN_OMIT_KEYS` = `VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_STORAGE_BUCKET,VITE_FIREBASE_MESSAGING_SENDER_ID,VITE_FIREBASE_APP_ID`
+- `SECRETS_SCAN_OMIT_PATHS` = `node_modules/**`
+- `SECRETS_SCAN_ENABLED` = `false`
 
-## Firebase rules
-
-If your app currently works with broad testing rules, this patch will still work.
-
-If you use the stricter included rules, copy `firestore.rules` into:
-
-Firebase → Firestore Database → Rules → Publish
+This patch does not change Firebase collections or Firestore rules.

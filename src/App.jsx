@@ -49,17 +49,14 @@ const LECTURE_TYPES = ['lecture', 'sdl', 'lab', 'practical', 'exam'];
 
 const DEFAULT_DASHBOARD_WIDGETS = [
   { id: 'todayPlan', label: "Today's Plan", enabled: true },
-  { id: 'pomodoro', label: 'Pomodoro Focus Timer', enabled: true },
+  { id: 'pomodoro', label: 'Focus Timer', enabled: true },
   { id: 'qbank', label: 'Dr. Stephens Boards Tracker', enabled: true },
-  { id: 'examCards', label: 'Exam Countdown + Readiness', enabled: true },
-  { id: 'overdue', label: 'Overdue Lectures', enabled: true },
-  { id: 'catchUp', label: 'Smart Catch-Up Planner', enabled: true },
   { id: 'progress', label: 'Progress Bars', enabled: true },
   { id: 'weeklyView', label: 'Weekly View', enabled: true },
   { id: 'weeklyReport', label: 'Weekly Report', enabled: true },
-  { id: 'selectedDay', label: 'Selected Day Lectures', enabled: true },
-  { id: 'allLectures', label: 'All Saved Lectures Fallback', enabled: true },
-  { id: 'importer', label: 'CSV Import + Manual Lecture', enabled: true }
+  { id: 'selectedDay', label: 'Selected Day', enabled: true },
+  { id: 'allLectures', label: 'All Saved Lectures', enabled: true },
+  { id: 'importer', label: 'Import / Add Lectures', enabled: true }
 ];
 
 const THEME_PRESETS = {
@@ -154,9 +151,7 @@ function useLocalStorageState(key, fallback) {
 
 function mergeWidgetSettings(saved) {
   const savedMap = new Map((Array.isArray(saved) ? saved : []).map((item) => [item.id, item]));
-  const merged = DEFAULT_DASHBOARD_WIDGETS.map((item) => ({ ...item, ...(savedMap.get(item.id) || {}) }));
-  const unknown = (Array.isArray(saved) ? saved : []).filter((item) => item?.id && !DEFAULT_DASHBOARD_WIDGETS.some((known) => known.id === item.id));
-  return [...merged, ...unknown];
+  return DEFAULT_DASHBOARD_WIDGETS.map((item) => ({ ...item, ...(savedMap.get(item.id) || {}) }));
 }
 
 function tasksForLecture(lecture) {
@@ -1649,17 +1644,17 @@ function DashboardCustomizer({ widgets, setWidgets, theme, setTheme, open, setOp
         <div className="panel-heading">
           <div>
             <p className="eyebrow">Settings</p>
-            <h2>Main page layout and colors</h2>
+            <h2>Homepage and colors</h2>
           </div>
           <button className="ghost-btn" onClick={() => setOpen(false)}>Close</button>
         </div>
         <div className="customizer-grid">
           <div className="customizer-column">
             <div className="panel-heading compact-heading">
-              <h3>Homepage sections</h3>
+              <h3>Homepage feature buttons</h3>
               <button className="ghost-btn small-btn" onClick={resetWidgets}>Reset order</button>
             </div>
-            <p className="muted">Choose what appears on the main page and use the arrows to reorder your dashboard.</p>
+            <p className="muted">Choose which feature buttons appear on the homepage and use the arrows to reorder them. Hidden features can be turned back on any time.</p>
             <div className="widget-sort-list">
               {widgets.map((widget, index) => (
                 <div className={widget.enabled ? 'widget-sort-row' : 'widget-sort-row disabled'} key={widget.id}>
@@ -1729,6 +1724,111 @@ function findRecommendation(lectures, progress, selectedDate) {
   return { title: lecture.title, lectureId: lecture.id, date: lecture.date, taskLabel: task.label, reason };
 }
 
+
+function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLectures, overall, dayScore, recommendation, qbankDays, widgets, onOpen }) {
+  const qbank = qbankTotals(qbankDays[selectedDate]);
+  const visibleWidgets = widgets.filter((widget) => widget.enabled);
+
+  const metrics = {
+    todayPlan: {
+      eyebrow: 'Daily command center',
+      metric: `${dayLectures.length} today`,
+      detail: `${overdueLectures.length} overdue · ${dayScore}% day score`
+    },
+    pomodoro: {
+      eyebrow: 'Deep work',
+      metric: 'Start timer',
+      detail: 'Nature focus mode with timer overlay'
+    },
+    qbank: {
+      eyebrow: 'Board questions',
+      metric: `${qbank.completed}/${qbank.planned || 0}`,
+      detail: qbank.completed ? `${qbank.accuracy}% correct` : 'Plan and log questions'
+    },
+    progress: {
+      eyebrow: 'Completion',
+      metric: `${overall}%`,
+      detail: 'Block, course, and exam progress'
+    },
+    weeklyView: {
+      eyebrow: 'Calendar',
+      metric: 'Week view',
+      detail: 'Drag lectures between days'
+    },
+    weeklyReport: {
+      eyebrow: 'Reflection',
+      metric: 'Report',
+      detail: 'See what changed this week'
+    },
+    selectedDay: {
+      eyebrow: niceDate(selectedDate, true),
+      metric: `${dayLectures.length} lectures`,
+      detail: 'Open today or any selected date'
+    },
+    allLectures: {
+      eyebrow: 'Saved library',
+      metric: `${lectures.length} total`,
+      detail: 'Browse every saved lecture'
+    },
+    importer: {
+      eyebrow: 'Add content',
+      metric: 'Import CSV',
+      detail: 'Upload block calendars or add lectures manually'
+    }
+  };
+
+  return (
+    <section className="panel homepage-panel">
+      <div className="panel-heading home-heading">
+        <div>
+          <p className="eyebrow">Introduction</p>
+          <h2>Welcome to your MedTracker dashboard</h2>
+          <p className="muted">Use this page as the clean starting point for the app. Pick one feature below when you are ready to plan lectures, start a focus session, track board questions, review progress, or manage saved lectures.</p>
+        </div>
+        <div className="home-score-card">
+          <span>Block completion</span>
+          <strong>{overall}%</strong>
+          <ProgressBar value={overall} />
+        </div>
+      </div>
+
+      <div className="home-priority-grid">
+        <div className="home-priority-card">
+          <span>Selected date</span>
+          <strong>{niceDate(selectedDate, true)}</strong>
+          <small>{dayLectures.length} lecture{dayLectures.length === 1 ? '' : 's'} · {dayScore}% complete</small>
+        </div>
+        <div className="home-priority-card">
+          <span>Overdue</span>
+          <strong>{overdueLectures.length}</strong>
+          <small>{overdueLectures.length ? 'Open Today’s Plan to triage' : 'No overdue lectures'}</small>
+        </div>
+        <div className="home-priority-card recommended">
+          <span>Recommended next</span>
+          <strong>{recommendation?.title || 'No urgent task'}</strong>
+          <small>{recommendation ? `${recommendation.taskLabel} · ${recommendation.reason}` : 'Everything currently looks caught up.'}</small>
+        </div>
+      </div>
+
+      <div className="home-section-label"><span>Open a feature</span><small>Only one tool opens at a time to keep the app uncluttered.</small></div>
+
+      <div className="home-feature-grid">
+        {visibleWidgets.map((widget) => {
+          const item = metrics[widget.id] || { eyebrow: 'Feature', metric: widget.label, detail: 'Open feature' };
+          return (
+            <button type="button" className="home-feature-card" key={widget.id} onClick={() => onOpen(widget.id)}>
+              <span>{item.eyebrow}</span>
+              <strong>{item.metric}</strong>
+              <small>{widget.label}</small>
+              <em>{item.detail}</em>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Dashboard({ user, workspace }) {
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [lectures, setLectures] = useState([]);
@@ -1741,6 +1841,7 @@ function Dashboard({ user, workspace }) {
   const themeKey = `medtracker:theme:${user.uid}`;
   const [widgets, setWidgets] = useLocalStorageState(widgetKey, DEFAULT_DASHBOARD_WIDGETS);
   const [theme, setTheme] = useLocalStorageState(themeKey, DEFAULT_THEME);
+  const [activeFeature, setActiveFeature] = useState('home');
 
   useEffect(() => {
     if (!workspace?.workspaceId) return undefined;
@@ -1779,6 +1880,12 @@ function Dashboard({ user, workspace }) {
   useEffect(() => {
     setWidgets((current) => mergeWidgetSettings(current));
   }, [widgetKey, setWidgets]);
+
+  useEffect(() => {
+    if (activeFeature !== 'home' && !widgets.some((widget) => widget.enabled && widget.id === activeFeature)) {
+      setActiveFeature('home');
+    }
+  }, [activeFeature, widgets, setActiveFeature]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -1876,13 +1983,98 @@ function Dashboard({ user, workspace }) {
     if (lectureId) await moveLectureToDate(lectureId, date);
   }
 
+  const enabledTabs = widgets.filter((widget) => widget.enabled && widget.id !== 'importer');
+  const importerEnabled = widgets.some((widget) => widget.id === 'importer' && widget.enabled);
+  const activeFeatureLabel = activeFeature === 'home' ? 'Introduction' : (widgets.find((widget) => widget.id === activeFeature)?.label || 'Feature');
+
+  function renderSelectedDay() {
+    return (
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Selected day</p>
+            <h2>{dayLectures.length ? `${dayLectures.length} lecture${dayLectures.length === 1 ? '' : 's'}` : 'No lectures listed for this day'}</h2>
+            <p className="muted">Open lecture cards here to check off tasks, edit details, or move them to another day.</p>
+          </div>
+        </div>
+        <div className="lecture-list">
+          {dayLectures.map((lecture) => (
+            <LectureCard
+              key={lecture.id}
+              lecture={lecture}
+              progress={progress[lecture.id]}
+              onToggle={toggleTask}
+              onDelete={deleteLecture}
+              onSave={updateLecture}
+              onMoveToDate={moveLectureToDate}
+              onDragStart={handleDragStart}
+            />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function renderAllSavedLectures() {
+    return (
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">All saved lectures</p>
+            <h2>{lectures.length ? `${lectures.length} saved lecture${lectures.length === 1 ? '' : 's'}` : 'No saved lectures yet'}</h2>
+            <p className="muted">Use this as the full lecture library. Click any lecture to jump to its date.</p>
+          </div>
+        </div>
+        <div className="all-lecture-list full-library-list">
+          {lectures.map((lecture) => (
+            <button className="saved-lecture-row" key={lecture.id} onClick={() => { setSelectedDate(lecture.date); setActiveFeature('selectedDay'); }}>
+              <span>{niceDate(lecture.date)}</span>
+              <strong>{timeLabel(lecture.startTime, lecture.endTime)} · {lecture.title}</strong>
+              <small>{lecture.course || 'No course'}{lecture.exam ? ` · ${lecture.exam}` : ''}{lecture.priority ? ` · ${lecture.priority}` : ''}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  function renderActiveFeature() {
+    if (activeFeature === 'home') {
+      return (
+        <FeatureHome
+          selectedDate={selectedDate}
+          lectures={lectures}
+          progress={progress}
+          dayLectures={dayLectures}
+          overdueLectures={overdueLectures}
+          overall={overall}
+          dayScore={dayScore}
+          recommendation={recommendation}
+          qbankDays={qbankDays}
+          widgets={widgets}
+          onOpen={setActiveFeature}
+        />
+      );
+    }
+    if (activeFeature === 'todayPlan') return <TodayPlan selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
+    if (activeFeature === 'pomodoro') return <PomodoroTimer lectures={lectures} selectedDate={selectedDate} />;
+    if (activeFeature === 'qbank') return <DrStephensBoardsTracker selectedDate={selectedDate} qbankDays={qbankDays} onSave={saveQbankDay} />;
+    if (activeFeature === 'progress') return <ProgressBreakdown lectures={lectures} progress={progress} />;
+    if (activeFeature === 'weeklyView') return <WeeklyView selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
+    if (activeFeature === 'weeklyReport') return <WeeklyReport selectedDate={selectedDate} lectures={lectures} progress={progress} />;
+    if (activeFeature === 'selectedDay') return renderSelectedDay();
+    if (activeFeature === 'allLectures') return renderAllSavedLectures();
+    if (activeFeature === 'importer') return <CsvImporter workspaceId={workspace.workspaceId} selectedDate={selectedDate} onSavedDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
+    return null;
+  }
+
   return (
-    <main className="dashboard">
-      <header className="topbar">
+    <main className="dashboard simplified-dashboard">
+      <header className="topbar simple-topbar">
         <div>
           <p className="eyebrow">{workspace.name}</p>
-          <h1>{niceDate(selectedDate)}</h1>
-          <p className="muted">Share code: <strong className="code-pill">{workspace.joinCode}</strong> · {members.length} member{members.length === 1 ? '' : 's'}</p>
+          <h1>MedTracker Home</h1>
+          <p className="muted">Selected date: <strong>{niceDate(selectedDate)}</strong> · Share code: <strong className="code-pill">{workspace.joinCode}</strong> · {members.length} member{members.length === 1 ? '' : 's'}</p>
         </div>
         <div className="date-controls">
           <button onClick={() => moveDay(-1)}>←</button>
@@ -1892,9 +2084,9 @@ function Dashboard({ user, workspace }) {
         </div>
       </header>
 
-      <section className="stats-grid productivity-stats">
+      <section className="stats-grid productivity-stats simple-stats">
         <div className="stat-card"><span>Total lectures</span><strong>{lectures.length}</strong></div>
-        <div className="stat-card"><span>Today</span><strong>{dayLectures.length}</strong></div>
+        <div className="stat-card"><span>Selected day</span><strong>{dayLectures.length}</strong></div>
         <div className="stat-card"><span>Overdue</span><strong>{overdueLectures.length}</strong></div>
         <div className="stat-card"><span>Day score</span><strong>{dayScore}%</strong></div>
         <div className="stat-card"><span>Block completion</span><strong>{overall}%</strong></div>
@@ -1902,77 +2094,32 @@ function Dashboard({ user, workspace }) {
 
       <aside className="right-action-menu" aria-label="Quick actions">
         <button type="button" onClick={() => setSettingsOpen(true)}>⚙ Settings</button>
-        <button type="button" onClick={() => setSelectedDate(todayISO())}>Today</button>
-        <button type="button" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}>Import</button>
+        <button type="button" onClick={() => { setSelectedDate(todayISO()); setActiveFeature('selectedDay'); }}>Today</button>
+        {importerEnabled && <button type="button" onClick={() => setActiveFeature('importer')}>Import</button>}
       </aside>
 
       {dataError && <section className="panel warning-panel"><p className="error-text">{dataError}</p></section>}
 
       <DashboardCustomizer widgets={widgets} setWidgets={setWidgets} theme={theme} setTheme={setTheme} open={settingsOpen} setOpen={setSettingsOpen} />
 
-      <section className="date-strip">
-        {dates.map((date) => (
-          <button key={date} className={date === selectedDate ? 'date-chip active' : 'date-chip'} onClick={() => setSelectedDate(date)}>
-            {niceDate(date).replace(/, \d{4}/, '')}
-          </button>
-        ))}
-      </section>
+      {activeFeature === 'home' ? (
+        <section className="intro-tab-panel" aria-label="Homepage introduction">
+          <button type="button" className="feature-tab active">Introduction</button>
+          <span className="intro-tab-helper">Choose a feature from the homepage cards below.</span>
+        </section>
+      ) : (
+        <section className="feature-return-panel" aria-label="Current feature">
+          <button type="button" className="ghost-btn" onClick={() => setActiveFeature('home')}>← Homepage</button>
+          <div>
+            <p className="eyebrow">Open feature</p>
+            <h2>{activeFeatureLabel}</h2>
+          </div>
+        </section>
+      )}
 
-      {widgets.filter((widget) => widget.enabled).map((widget) => {
-        if (widget.id === 'todayPlan') return <TodayPlan key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
-        if (widget.id === 'pomodoro') return <PomodoroTimer key={widget.id} lectures={lectures} selectedDate={selectedDate} />;
-        if (widget.id === 'qbank') return <DrStephensBoardsTracker key={widget.id} selectedDate={selectedDate} qbankDays={qbankDays} onSave={saveQbankDay} />;
-        if (widget.id === 'examCards') return <ExamCards key={widget.id} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} />;
-        if (widget.id === 'overdue') return <OverduePanel key={widget.id} overdueLectures={overdueLectures} progress={progress} onSelectDate={setSelectedDate} onMoveLecture={moveLectureToDate} />;
-        if (widget.id === 'catchUp') return <SmartCatchUp key={widget.id} overdueLectures={overdueLectures} progress={progress} />;
-        if (widget.id === 'progress') return <ProgressBreakdown key={widget.id} lectures={lectures} progress={progress} />;
-        if (widget.id === 'weeklyView') return <WeeklyView key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
-        if (widget.id === 'weeklyReport') return <WeeklyReport key={widget.id} selectedDate={selectedDate} lectures={lectures} progress={progress} />;
-        if (widget.id === 'selectedDay') return (
-          <section className="panel" key={widget.id}>
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Selected day</p>
-                <h2>{dayLectures.length ? `${dayLectures.length} lecture${dayLectures.length === 1 ? '' : 's'}` : 'No lectures listed for this day'}</h2>
-              </div>
-            </div>
-            <div className="lecture-list">
-              {dayLectures.map((lecture) => (
-                <LectureCard
-                  key={lecture.id}
-                  lecture={lecture}
-                  progress={progress[lecture.id]}
-                  onToggle={toggleTask}
-                  onDelete={deleteLecture}
-                  onSave={updateLecture}
-                  onMoveToDate={moveLectureToDate}
-                  onDragStart={handleDragStart}
-                />
-              ))}
-            </div>
-          </section>
-        );
-        if (widget.id === 'allLectures') return dayLectures.length === 0 && lectures.length > 0 ? (
-          <section className="panel" key={widget.id}>
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">All saved lectures</p>
-                <h2>Pick one of these dates to view lectures</h2>
-              </div>
-            </div>
-            <div className="all-lecture-list">
-              {lectures.slice(0, 40).map((lecture) => (
-                <button className="saved-lecture-row" key={lecture.id} onClick={() => setSelectedDate(lecture.date)}>
-                  <span>{niceDate(lecture.date)}</span>
-                  <strong>{timeLabel(lecture.startTime, lecture.endTime)} · {lecture.title}</strong>
-                </button>
-              ))}
-            </div>
-          </section>
-        ) : null;
-        if (widget.id === 'importer') return <CsvImporter key={widget.id} workspaceId={workspace.workspaceId} selectedDate={selectedDate} onSavedDate={setSelectedDate} />;
-        return null;
-      })}
+      <div className="active-feature-shell">
+        {renderActiveFeature()}
+      </div>
     </main>
   );
 }
