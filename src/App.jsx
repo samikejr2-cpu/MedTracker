@@ -23,11 +23,9 @@ import { auth, db, isFirebaseConfigured } from './firebase.js';
 import { parseCalendarCsv, todayISO } from './csvImport.js';
 
 const CORE_TASKS = [
-  { key: 'watched', label: 'Watched lecture', group: 'Core' },
-  { key: 'notes', label: 'Took notes', group: 'Core' },
-  { key: 'anki', label: 'Made Anki', group: 'Core' },
-  { key: 'pass1', label: 'First pass', group: 'Core' },
-  { key: 'pass2', label: 'Second pass', group: 'Core' }
+  { key: 'firstPass', legacyKeys: ['watched'], label: '1. First Pass (watched lecture)', group: 'Core' },
+  { key: 'secondPass', legacyKeys: ['notes', 'anki'], label: '2. Second Pass (Took Notes / Make Anki)', group: 'Core' },
+  { key: 'thirdPass', legacyKeys: ['pass1', 'pass2'], label: '3. Third Pass (Reviewed Anki / Notes)', group: 'Core' }
 ];
 
 const BOARD_TASKS = [
@@ -160,6 +158,12 @@ function tasksForLecture(lecture) {
   return practical ? [...CORE_TASKS, ...BOARD_TASKS, ...PRACTICAL_TASKS] : [...CORE_TASKS, ...BOARD_TASKS];
 }
 
+function taskCompleted(progress = {}, task) {
+  if (!task) return false;
+  if (progress?.[task.key]) return true;
+  return (task.legacyKeys || []).some((legacyKey) => progress?.[legacyKey]);
+}
+
 function makeJoinCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
@@ -231,7 +235,7 @@ function normalizeEmail(email) {
 function completionPercent(lecture, progress) {
   const tasks = tasksForLecture(lecture);
   if (tasks.length === 0) return 0;
-  const done = tasks.filter((task) => progress?.[task.key]).length;
+  const done = tasks.filter((task) => taskCompleted(progress, task)).length;
   return Math.round((done / tasks.length) * 100);
 }
 
@@ -241,7 +245,7 @@ function taskCountsForLectures(lectures, progress) {
   lectures.forEach((lecture) => {
     const tasks = tasksForLecture(lecture);
     total += tasks.length;
-    done += tasks.filter((task) => progress[lecture.id]?.[task.key]).length;
+    done += tasks.filter((task) => taskCompleted(progress[lecture.id], task)).length;
   });
   return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
 }
@@ -338,6 +342,7 @@ function AuthScreen() {
           <span>📆 Weekly plan + overdue tracker</span>
           <span>🧠 Exam, board, and practical checklists</span>
         </div>
+        <p className="creator-credit">Created by Andrew Mike.</p>
       </section>
 
       <section className="auth-card">
@@ -864,8 +869,8 @@ function LectureCard({ lecture, progress, onToggle, onDelete, onSave, onMoveToDa
                 <p className="task-section-title">{group} checklist</p>
                 <div className="task-grid">
                   {groupTasks.map((task) => (
-                    <label className={progress?.[task.key] ? 'check-chip checked' : 'check-chip'} key={task.key}>
-                      <input type="checkbox" checked={Boolean(progress?.[task.key])} onChange={() => onToggle(lecture.id, task.key)} />
+                    <label className={taskCompleted(progress, task) ? 'check-chip checked' : 'check-chip'} key={task.key}>
+                      <input type="checkbox" checked={taskCompleted(progress, task)} onChange={() => onToggle(lecture.id, task.key)} />
                       <span>{task.label}</span>
                     </label>
                   ))}
@@ -1716,7 +1721,7 @@ function findRecommendation(lectures, progress, selectedDate) {
       || a.date.localeCompare(b.date);
   });
   const lecture = ranked[0];
-  const task = tasksForLecture(lecture).find((item) => !progress[lecture.id]?.[item.key]) || CORE_TASKS[0];
+  const task = tasksForLecture(lecture).find((item) => !taskCompleted(progress[lecture.id], item)) || CORE_TASKS[0];
   let reason = 'next incomplete task';
   if (lecture.date < today) reason = 'overdue';
   else if (lecture.date === selectedDate) reason = 'scheduled today';
@@ -1929,15 +1934,23 @@ function Dashboard({ user, workspace }) {
   const recommendation = findRecommendation([...lectures], progress, selectedDate);
 
   async function toggleTask(lectureId, key) {
+    const lecture = lectures.find((item) => item.id === lectureId);
+    const task = tasksForLecture(lecture || {}).find((item) => item.key === key) || { key };
     const current = progress[lectureId] || {};
-    const nextValue = !current[key];
+    const nextValue = !taskCompleted(current, task);
     const ref = doc(db, 'workspaces', workspace.workspaceId, 'progress', `${user.uid}_${lectureId}`);
-    await setDoc(ref, {
+    const patch = {
       userId: user.uid,
       lectureId,
       [key]: nextValue,
       updatedAt: serverTimestamp()
-    }, { merge: true });
+    };
+    if (!nextValue) {
+      (task.legacyKeys || []).forEach((legacyKey) => {
+        patch[legacyKey] = false;
+      });
+    }
+    await setDoc(ref, patch, { merge: true });
   }
 
   async function updateLecture(lectureId, patch) {

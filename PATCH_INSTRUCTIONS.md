@@ -1,44 +1,28 @@
-# MedTracker One-Feature Homepage Patch
+# Andrew Credit + Three-Pass Checklist + Mobile Polish Patch
 
-This patch redesigns the dashboard so the app opens to a clean homepage with an introduction and feature cards. Each feature opens one at a time instead of showing every dashboard section on one long page.
+This patch updates the current MedTracker app with:
 
-## Features
-
-- Simple homepage / introduction screen
-- Feature cards for:
-  - Today's Plan
-  - Focus Timer
-  - Dr. Stephens Boards Tracker
-  - Exam Countdown + Readiness
-  - Overdue Lectures
-  - Smart Catch-Up Planner
-  - Progress Bars
-  - Weekly View
-  - Weekly Report
-  - Selected Day Lectures
-  - All Saved Lectures
-  - Import / Add Lectures
-- "← Homepage" button on every feature view
-- Right-side menu still includes Settings, Today, and Import
-- Settings still controls which homepage cards appear and the order of those cards
-- Build-tested successfully
+1. A login-page credit: **Created by Andrew Mike.**
+2. A simplified core lecture checklist:
+   - **1. First Pass (watched lecture)**
+   - **2. Second Pass (Took Notes / Make Anki)**
+   - **3. Third Pass (Reviewed Anki / Notes)**
+3. Backward compatibility with older saved lecture progress keys where possible.
+4. Improved iPhone/iPad/mobile layout and touch usability.
 
 ## Install
 
-1. Extract this ZIP.
-2. Open your GitHub repository.
-3. Click **Add file → Upload files**.
-4. Upload the `src` folder and this `PATCH_INSTRUCTIONS.md` file from inside the extracted folder.
-5. Commit changes.
-6. In Netlify, run **Deploys → Trigger deploy → Clear cache and deploy site**.
-7. After Netlify says **Published**, open `https://medltracker.netlify.app` and hard refresh.
+Upload these items to the root of your GitHub repository:
 
-## Notes
+- `src`
+- `index.html`
+- `PATCH_INSTRUCTIONS.md`
 
-If Netlify secrets scanning fails, keep these environment variables in Netlify:
+Then commit changes and deploy in Netlify with:
 
-- `SECRETS_SCAN_OMIT_KEYS` = `VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_STORAGE_BUCKET,VITE_FIREBASE_MESSAGING_SENDER_ID,VITE_FIREBASE_APP_ID`
-- `SECRETS_SCAN_OMIT_PATHS` = `node_modules/**`
-- `SECRETS_SCAN_ENABLED` = `false`
+**Deploys → Trigger deploy → Clear cache and deploy site**
 
-This patch does not change Firebase collections or Firestore rules.
+After deployment, hard refresh:
+
+- PC: `Ctrl + Shift + R`
+- iPad/iPhone: close Safari fully and reopen the app
