@@ -1449,3 +1449,117 @@ button,
     min-width: 64px;
   }
 }
+
+
+/* Study Time Log */
+.study-log-panel .tracker-date-controls {
+  margin-bottom: 1rem;
+}
+
+.study-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.study-log-form {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 1.1rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.study-log-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.study-timer-card {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: center;
+  text-align: center;
+  padding: 1.1rem;
+  border-radius: 1.1rem;
+  background: radial-gradient(circle at top, rgba(56, 189, 248, 0.20), rgba(255, 255, 255, 0.04));
+  border: 1px solid rgba(56, 189, 248, 0.24);
+}
+
+.study-timer-card span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.study-timer-card strong {
+  font-size: clamp(2.4rem, 8vw, 4.5rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact-buttons {
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.study-session-history {
+  margin-top: 1.2rem;
+}
+
+.small-heading {
+  margin-bottom: 0.75rem;
+}
+
+.study-session-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.study-session-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.study-session-row div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.study-session-row small {
+  color: var(--muted);
+}
+
+.study-session-row p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.danger-btn {
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+@media (max-width: 760px) {
+  .study-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .study-session-row {
+    flex-direction: column;
+  }
+
+  .study-session-row .danger-btn {
+    width: 100%;
+  }
+}

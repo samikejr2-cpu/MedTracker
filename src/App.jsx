@@ -29,10 +29,8 @@ const CORE_TASKS = [
 ];
 
 const BOARD_TASKS = [
-  { key: 'boardVideo', label: 'Board video/resource', group: 'Board' },
-  { key: 'firstAid', label: 'First Aid / board notes', group: 'Board' },
-  { key: 'questions', label: 'Question bank set', group: 'Board' },
-  { key: 'missedReview', label: 'Missed questions reviewed', group: 'Board' }
+  { key: 'boardVideo', legacyKeys: ['firstAid'], label: 'Board Video/Resource', group: 'Board' },
+  { key: 'questions', legacyKeys: ['missedReview'], label: 'Question Bank Set?', group: 'Board' }
 ];
 
 const PRACTICAL_TASKS = [
@@ -49,6 +47,7 @@ const DEFAULT_DASHBOARD_WIDGETS = [
   { id: 'todayPlan', label: "Today's Plan", enabled: true },
   { id: 'pomodoro', label: 'Focus Timer', enabled: true },
   { id: 'qbank', label: 'Dr. Stephens Boards Tracker', enabled: true },
+  { id: 'studyTime', label: 'Study Time Log', enabled: true },
   { id: 'progress', label: 'Progress Bars', enabled: true },
   { id: 'weeklyView', label: 'Weekly View', enabled: true },
   { id: 'weeklyReport', label: 'Weekly Report', enabled: true },
@@ -1232,6 +1231,43 @@ function qbankTotals(day) {
   };
 }
 
+function formatDuration(seconds = 0) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  return `${minutes}m ${String(secs).padStart(2, '0')}s`;
+}
+
+function formatTimerClock(seconds = 0) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    : `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function secondsFromStudySession(session = {}) {
+  if (Number.isFinite(Number(session.seconds))) return Math.max(0, Number(session.seconds));
+  return Math.max(0, numberOrZero(session.minutes) * 60);
+}
+
+function studySessionTotals(sessions = [], selectedDate = todayISO()) {
+  const today = selectedDate || todayISO();
+  const week = weekDates(today);
+  const todaySeconds = sessions
+    .filter((session) => session.date === today)
+    .reduce((sum, session) => sum + secondsFromStudySession(session), 0);
+  const weekSeconds = sessions
+    .filter((session) => week.includes(session.date))
+    .reduce((sum, session) => sum + secondsFromStudySession(session), 0);
+  const allSeconds = sessions.reduce((sum, session) => sum + secondsFromStudySession(session), 0);
+  return { todaySeconds, weekSeconds, allSeconds };
+}
+
 function DrStephensBoardsTracker({ selectedDate, qbankDays, onSave }) {
   const blankDraft = { planned: '', completed: '', correct: '', source: '', notes: '' };
   const [trackerDate, setTrackerDate] = useState(selectedDate || todayISO());
@@ -1456,6 +1492,159 @@ function DrStephensBoardsTracker({ selectedDate, qbankDays, onSave }) {
               );
             })}
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
+  const [logDate, setLogDate] = useState(selectedDate || todayISO());
+  const [subjectLecture, setSubjectLecture] = useState('');
+  const [notes, setNotes] = useState('');
+  const [seconds, setSeconds] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    setLogDate(selectedDate || todayISO());
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (!running) return undefined;
+    const id = window.setInterval(() => setSeconds((current) => current + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
+
+  const selectedSessions = useMemo(
+    () => studySessions.filter((session) => session.date === logDate),
+    [studySessions, logDate]
+  );
+  const totals = studySessionTotals(studySessions, logDate);
+  const dateOptions = [
+    { label: `Today — ${niceDate(todayISO(), true)}`, value: todayISO() },
+    { label: `Selected app date — ${niceDate(selectedDate, true)}`, value: selectedDate },
+    ...weekDates(selectedDate || todayISO()).map((date) => ({ label: niceDate(date, true), value: date }))
+  ].filter((item, index, arr) => item.value && arr.findIndex((candidate) => candidate.value === item.value) === index);
+
+  function addManualMinutes(minutes) {
+    setSeconds((current) => current + Math.max(0, numberOrZero(minutes) * 60));
+  }
+
+  async function saveSession(e) {
+    e.preventDefault();
+    setMessage('');
+    if (!subjectLecture.trim()) {
+      setMessage('Enter the subject or lecture before saving the study session.');
+      return;
+    }
+    if (seconds <= 0) {
+      setMessage('Start the timer or add time before saving.');
+      return;
+    }
+    setSaving(true);
+    setRunning(false);
+    try {
+      await onSave({
+        date: logDate,
+        subjectLecture: subjectLecture.trim(),
+        notes: notes.trim(),
+        seconds,
+        minutes: Math.round(seconds / 60)
+      });
+      setSubjectLecture('');
+      setNotes('');
+      setSeconds(0);
+      setMessage('Study session saved.');
+    } catch (err) {
+      setMessage(err.message || 'Could not save study session.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="panel study-log-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Study time</p>
+          <h2>Study Time Log</h2>
+          <p className="muted">Track focused study time by subject, lecture, and notes. Saved sessions sync across devices.</p>
+        </div>
+        <div className="score-badge">{formatDuration(totals.todaySeconds)} today</div>
+      </div>
+
+      <div className="study-summary-grid">
+        <div className="stat-card"><span>Selected date</span><strong>{formatDuration(totals.todaySeconds)}</strong></div>
+        <div className="stat-card"><span>This week</span><strong>{formatDuration(totals.weekSeconds)}</strong></div>
+        <div className="stat-card"><span>All logged</span><strong>{formatDuration(totals.allSeconds)}</strong></div>
+      </div>
+
+      <form className="study-log-form" onSubmit={saveSession}>
+        <div className="tracker-date-controls">
+          <label>
+            Choose log date
+            <select value={logDate} onChange={(e) => setLogDate(e.target.value)}>
+              {dateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Calendar date
+            <input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
+          </label>
+        </div>
+
+        <label>
+          Subject / lecture
+          <input value={subjectLecture} onChange={(e) => setSubjectLecture(e.target.value)} placeholder="Example: Renal clearance, PUD, Anatomy lab review" />
+        </label>
+
+        <label>
+          Notes
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What did you work on? What still needs review?" />
+        </label>
+
+        <div className="study-timer-card">
+          <span>Current session</span>
+          <strong>{formatTimerClock(seconds)}</strong>
+          <div className="button-row compact-buttons">
+            <button type="button" className="primary-btn" onClick={() => setRunning(true)} disabled={running}>Start</button>
+            <button type="button" onClick={() => setRunning(false)} disabled={!running}>Pause</button>
+            <button type="button" onClick={() => { setRunning(false); setSeconds(0); }}>Reset</button>
+          </div>
+          <div className="button-row compact-buttons">
+            <button type="button" onClick={() => addManualMinutes(15)}>+15 min</button>
+            <button type="button" onClick={() => addManualMinutes(30)}>+30 min</button>
+            <button type="button" onClick={() => addManualMinutes(60)}>+60 min</button>
+          </div>
+        </div>
+
+        <div className="button-row">
+          <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save Study Session'}</button>
+        </div>
+        {message && <p className={message.includes('Could') || message.includes('Enter') || message.includes('Start') ? 'error-text' : 'success-text'}>{message}</p>}
+      </form>
+
+      <div className="study-session-history">
+        <div className="panel-heading small-heading">
+          <div>
+            <p className="eyebrow">Saved sessions</p>
+            <h3>{selectedSessions.length ? `${selectedSessions.length} session${selectedSessions.length === 1 ? '' : 's'} on ${niceDate(logDate, true)}` : `No sessions saved for ${niceDate(logDate, true)}`}</h3>
+          </div>
+        </div>
+        <div className="study-session-list">
+          {selectedSessions.map((session) => (
+            <article className="study-session-row" key={session.id}>
+              <div>
+                <strong>{session.subjectLecture}</strong>
+                <small>{niceDate(session.date, true)} · {formatDuration(secondsFromStudySession(session))}</small>
+                {session.notes && <p>{session.notes}</p>}
+              </div>
+              <button type="button" className="danger-btn" onClick={() => onDelete(session.id)}>Delete</button>
+            </article>
+          ))}
         </div>
       </div>
     </section>
@@ -1730,8 +1919,9 @@ function findRecommendation(lectures, progress, selectedDate) {
 }
 
 
-function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLectures, overall, dayScore, recommendation, qbankDays, widgets, onOpen }) {
+function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLectures, overall, dayScore, recommendation, qbankDays, studySessions, widgets, onOpen }) {
   const qbank = qbankTotals(qbankDays[selectedDate]);
+  const studyTotals = studySessionTotals(studySessions, selectedDate);
   const visibleWidgets = widgets.filter((widget) => widget.enabled);
 
   const metrics = {
@@ -1749,6 +1939,11 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
       eyebrow: 'Board questions',
       metric: `${qbank.completed}/${qbank.planned || 0}`,
       detail: qbank.completed ? `${qbank.accuracy}% correct` : 'Plan and log questions'
+    },
+    studyTime: {
+      eyebrow: 'Study time',
+      metric: formatDuration(studyTotals.todaySeconds),
+      detail: `${formatDuration(studyTotals.weekSeconds)} logged this week`
     },
     progress: {
       eyebrow: 'Completion',
@@ -1841,6 +2036,7 @@ function Dashboard({ user, workspace }) {
   const [dataError, setDataError] = useState('');
   const [members, setMembers] = useState([]);
   const [qbankDays, setQbankDays] = useState({});
+  const [studySessions, setStudySessions] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const widgetKey = `medtracker:widgets:${user.uid}:${workspace.workspaceId}`;
   const themeKey = `medtracker:theme:${user.uid}`;
@@ -1921,6 +2117,17 @@ function Dashboard({ user, workspace }) {
     }, (err) => setDataError(err.message || 'Could not load question tracker.'));
   }, [workspace?.workspaceId, user.uid]);
 
+  useEffect(() => {
+    if (!workspace?.workspaceId) return undefined;
+    return onSnapshot(collection(db, 'workspaces', workspace.workspaceId, 'studySessions'), (snapshot) => {
+      const next = snapshot.docs
+        .map((item) => ({ id: item.id, ...item.data() }))
+        .filter((item) => item.userId === user.uid)
+        .sort((a, b) => `${b.date || ''} ${b.createdAt?.seconds || 0}`.localeCompare(`${a.date || ''} ${a.createdAt?.seconds || 0}`));
+      setStudySessions(next);
+    }, (err) => setDataError(err.message || 'Could not load study time logs.'));
+  }, [workspace?.workspaceId, user.uid]);
+
   const dates = useMemo(() => {
     const unique = Array.from(new Set(lectures.map((lecture) => lecture.date).filter(Boolean))).sort();
     return unique.length ? unique : [selectedDate];
@@ -1979,6 +2186,21 @@ function Dashboard({ user, workspace }) {
       date,
       updatedAt: serverTimestamp()
     }, { merge: true });
+  }
+
+  async function saveStudySession(session) {
+    await addDoc(collection(db, 'workspaces', workspace.workspaceId, 'studySessions'), {
+      ...session,
+      userId: user.uid,
+      workspaceId: workspace.workspaceId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  async function deleteStudySession(sessionId) {
+    if (!window.confirm('Delete this study session?')) return;
+    await deleteDoc(doc(db, 'workspaces', workspace.workspaceId, 'studySessions', sessionId));
   }
 
   function moveDay(delta) {
@@ -2064,6 +2286,7 @@ function Dashboard({ user, workspace }) {
           dayScore={dayScore}
           recommendation={recommendation}
           qbankDays={qbankDays}
+          studySessions={studySessions}
           widgets={widgets}
           onOpen={setActiveFeature}
         />
@@ -2072,6 +2295,7 @@ function Dashboard({ user, workspace }) {
     if (activeFeature === 'todayPlan') return <TodayPlan selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
     if (activeFeature === 'pomodoro') return <PomodoroTimer lectures={lectures} selectedDate={selectedDate} />;
     if (activeFeature === 'qbank') return <DrStephensBoardsTracker selectedDate={selectedDate} qbankDays={qbankDays} onSave={saveQbankDay} />;
+    if (activeFeature === 'studyTime') return <StudyTimeLogger selectedDate={selectedDate} studySessions={studySessions} onSave={saveStudySession} onDelete={deleteStudySession} />;
     if (activeFeature === 'progress') return <ProgressBreakdown lectures={lectures} progress={progress} />;
     if (activeFeature === 'weeklyView') return <WeeklyView selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
     if (activeFeature === 'weeklyReport') return <WeeklyReport selectedDate={selectedDate} lectures={lectures} progress={progress} />;
