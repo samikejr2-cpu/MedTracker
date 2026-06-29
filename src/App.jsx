@@ -52,8 +52,10 @@ const DEFAULT_DASHBOARD_WIDGETS = [
   { id: 'examPlanner', label: 'Exam Planner', enabled: true },
   { id: 'courseBreakdown', label: 'Course Breakdown', enabled: true },
   { id: 'studyBySubject', label: 'Study Time by Subject', enabled: true },
+  { id: 'bestTimeAnalytics', label: 'Best Time of Day Analytics', enabled: true },
   { id: 'smartEstimator', label: 'Smart Study Time Estimator', enabled: true },
   { id: 'boardsChecklist', label: 'Boards Checklist', enabled: true },
+  { id: 'boardMatchmaker', label: 'Board Resource Matchmaker', enabled: true },
   { id: 'todoList', label: 'General To-Do List', enabled: true },
   { id: 'progress', label: 'Progress Bars', enabled: true },
   { id: 'weeklyView', label: 'Weekly View', enabled: true },
@@ -367,6 +369,268 @@ function ProgressBar({ value }) {
       <div className="progress-fill" style={{ width: `${Math.max(0, Math.min(100, value || 0))}%` }} />
     </div>
   );
+}
+
+function heatLevel(value = 0, max = 100) {
+  const numeric = Math.max(0, Number(value) || 0);
+  const ceiling = Math.max(1, Number(max) || 1);
+  if (numeric <= 0) return 0;
+  return Math.max(1, Math.min(5, Math.ceil((numeric / ceiling) * 5)));
+}
+
+function HeatLegend({ label = 'Low → high' }) {
+  return (
+    <div className="heat-legend" aria-label={label}>
+      <span>{label}</span>
+      {[0, 1, 2, 3, 4, 5].map((level) => <i key={level} className={`heat-swatch heat-${level}`} />)}
+    </div>
+  );
+}
+
+function HeatCell({ cell, max }) {
+  const level = heatLevel(cell.value, max);
+  return (
+    <button
+      type="button"
+      className={`heat-cell heat-${level}`}
+      title={`${cell.label}: ${cell.display || cell.value || 0}${cell.detail ? ` · ${cell.detail}` : ''}`}
+      onClick={cell.onClick}
+      disabled={!cell.onClick}
+    >
+      <strong>{cell.short || cell.label}</strong>
+      <span>{cell.display || cell.value || 0}</span>
+      {cell.sub && <small>{cell.sub}</small>}
+    </button>
+  );
+}
+
+function HeatMapPanel({ title, subtitle, cells = [], emptyText = 'No data yet.', legend = 'Low → high' }) {
+  const max = Math.max(1, ...cells.map((cell) => Number(cell.value) || 0));
+  return (
+    <div className="heatmap-panel-block">
+      <div className="heatmap-panel-heading">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p className="muted">{subtitle}</p>}
+        </div>
+        <HeatLegend label={legend} />
+      </div>
+      {cells.length === 0 ? <p className="muted">{emptyText}</p> : (
+        <div className="heatmap-grid">
+          {cells.map((cell) => <HeatCell key={cell.id || cell.label} cell={cell} max={max} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniHeatMap({ cells = [], label = 'Mini heat map' }) {
+  const max = Math.max(1, ...cells.map((cell) => Number(cell.value) || 0));
+  return (
+    <div className="mini-heatmap" aria-label={label} title={label}>
+      {cells.slice(0, 14).map((cell) => (
+        <span key={cell.id || cell.label} className={`mini-heat-cell heat-${heatLevel(cell.value, max)}`} title={`${cell.label}: ${cell.display || cell.value || 0}`} />
+      ))}
+    </div>
+  );
+}
+
+function studyTimeDailyHeatCells(sessions = [], selectedDate = todayISO(), dayCount = 28) {
+  const end = toLocalDate(selectedDate || todayISO()) || new Date();
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(end);
+    date.setDate(end.getDate() - (dayCount - 1 - index));
+    const iso = isoFromDate(date);
+    const seconds = sessions
+      .filter((session) => session.date === iso)
+      .reduce((sum, session) => sum + secondsFromStudySession(session), 0);
+    return {
+      id: iso,
+      label: niceDate(iso, true),
+      short: date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 2),
+      value: seconds,
+      display: formatDuration(seconds),
+      sub: date.getDate()
+    };
+  });
+}
+
+function sessionDateObject(session = {}) {
+  if (session.startedAtISO) {
+    const started = new Date(session.startedAtISO);
+    if (!Number.isNaN(started.getTime())) return started;
+  }
+  if (session.createdAt?.toDate) {
+    try { return session.createdAt.toDate(); } catch { /* no-op */ }
+  }
+  if (Number.isFinite(Number(session.createdAt?.seconds))) return new Date(Number(session.createdAt.seconds) * 1000);
+  if (typeof session.createdAt === 'string') {
+    const parsed = new Date(session.createdAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+
+function hourLabel(hour) {
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 || 12;
+  return `${hour12} ${suffix}`;
+}
+
+function bestTimeOfDayRows(sessions = []) {
+  const map = new Map();
+  sessions.forEach((session) => {
+    const when = sessionDateObject(session);
+    if (!when) return;
+    const hour = when.getHours();
+    const label = hourLabel(hour);
+    if (!map.has(hour)) map.set(hour, { hour, label, seconds: 0, sessions: 0 });
+    const row = map.get(hour);
+    row.seconds += secondsFromStudySession(session);
+    row.sessions += 1;
+  });
+  return Array.from(map.values()).sort((a, b) => b.seconds - a.seconds || a.hour - b.hour);
+}
+
+function bestTimeHeatCells(sessions = []) {
+  const byHour = new Map(bestTimeOfDayRows(sessions).map((row) => [row.hour, row]));
+  return Array.from({ length: 24 }, (_, hour) => {
+    const row = byHour.get(hour) || { hour, label: hourLabel(hour), seconds: 0, sessions: 0 };
+    return {
+      id: `hour-${hour}`,
+      label: row.label,
+      short: row.label.replace(' ', ''),
+      value: row.seconds,
+      display: formatDuration(row.seconds),
+      sub: `${row.sessions} session${row.sessions === 1 ? '' : 's'}`
+    };
+  });
+}
+
+function boardResourceHeatCells(boardChecklist = {}) {
+  return BOARDS_CHECKLIST_RESOURCES.map((resource) => {
+    const stats = resourceProgressStats(resource, boardChecklist[resource.key]);
+    return {
+      id: resource.key,
+      label: resource.label,
+      short: resource.label.split(/\s+/).map((word) => word[0]).join('').slice(0, 4),
+      value: stats.percentItems,
+      display: `${stats.percentItems}%`,
+      sub: `${stats.completedItems}/${stats.totalItems}`,
+      detail: stats.totalSeconds ? `${stats.percentSeconds}% time watched` : 'No video duration listed'
+    };
+  });
+}
+
+function boardSectionHeatCells(resource, saved = {}) {
+  const groups = new Map();
+  (resource?.items || []).forEach((item) => {
+    const section = item.section || 'General';
+    if (!groups.has(section)) groups.set(section, { section, total: 0, done: 0, seconds: 0, doneSeconds: 0 });
+    const row = groups.get(section);
+    row.total += 1;
+    row.seconds += numberOrZero(item.durationSeconds);
+    if (saved?.completed?.[item.id]) {
+      row.done += 1;
+      row.doneSeconds += numberOrZero(item.durationSeconds);
+    }
+  });
+  return Array.from(groups.values()).map((row) => {
+    const percent = percentFromParts(row.done, row.total);
+    return {
+      id: row.section,
+      label: row.section,
+      short: row.section.replace(/^[IVX]+\.\s*/, '').slice(0, 12),
+      value: percent,
+      display: `${percent}%`,
+      sub: `${row.done}/${row.total}`,
+      detail: row.seconds ? `${percentFromParts(row.doneSeconds, row.seconds)}% time watched` : ''
+    };
+  }).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function weeklyProgressHeatCells(selectedDate, lectures = [], progress = {}) {
+  return weekDates(selectedDate).map((date) => {
+    const items = lectures.filter((lecture) => lecture.date === date);
+    const counts = taskCountsForLectures(items, progress);
+    return {
+      id: date,
+      label: niceDate(date, true),
+      short: niceDate(date, true).split(',')[0].slice(0, 3),
+      value: counts.percent,
+      display: `${counts.percent}%`,
+      sub: `${items.length} lectures`
+    };
+  });
+}
+
+function progressRowsToHeatCells(rows = []) {
+  return rows.map((row) => ({
+    id: row.label,
+    label: row.label,
+    short: row.label.slice(0, 10),
+    value: row.percent,
+    display: `${row.percent}%`,
+    sub: `${row.count} lectures`
+  }));
+}
+
+function normalizeKeywordText(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const STOP_WORDS = new Set(['the', 'and', 'with', 'for', 'into', 'from', 'this', 'that', 'lecture', 'sdl', 'lab', 'pre', 'post', 'disease', 'diseases', 'system', 'systems', 'anatomy', 'physiology', 'functional', 'clinical', 'approach', 'review']);
+
+function keywordTokens(value) {
+  return normalizeKeywordText(value)
+    .split(/\s+/)
+    .filter((token) => token.length >= 4 && !STOP_WORDS.has(token));
+}
+
+function boardResourceMatchesForLecture(lecture = {}, boardChecklist = {}) {
+  const text = `${lecture.title || ''} ${lecture.course || ''} ${lecture.lectureType || ''} ${lecture.boardResource || ''}`;
+  const tokens = keywordTokens(text);
+  const courseText = normalizeKeywordText(lecture.course);
+  const titleText = normalizeKeywordText(lecture.title);
+
+  return BOARDS_CHECKLIST_RESOURCES.map((resource) => {
+    const saved = boardChecklist[resource.key] || {};
+    const stats = resourceProgressStats(resource, saved);
+    const resourceText = normalizeKeywordText(`${resource.label} ${resource.key}`);
+    const matchingItems = (resource.items || []).map((item) => {
+      const itemText = normalizeKeywordText(`${item.title} ${item.section} ${item.detail}`);
+      let score = tokens.reduce((sum, token) => sum + (itemText.includes(token) ? 2 : 0), 0);
+      if (titleText && itemText.includes(titleText)) score += 8;
+      if (courseText && itemText.includes(courseText)) score += 2;
+      if (resourceText.includes('path') && (titleText.includes('path') || courseText.includes('pathology'))) score += 2;
+      if (resourceText.includes('sketchy') && (titleText.includes('micro') || titleText.includes('pharm') || courseText.includes('pharmacology'))) score += 2;
+      if (resourceText.includes('physeo') && (courseText.includes('physio') || titleText.includes('physiology'))) score += 2;
+      return { item, score };
+    }).filter((row) => row.score > 0).sort((a, b) => b.score - a.score);
+
+    const score = matchingItems.slice(0, 5).reduce((sum, row) => sum + row.score, 0);
+    return {
+      resource,
+      score,
+      stats,
+      items: matchingItems.slice(0, 5).map((row) => row.item)
+    };
+  }).filter((row) => row.score > 0).sort((a, b) => b.score - a.score || a.resource.label.localeCompare(b.resource.label));
+}
+
+function topBoardResourceMatches(lectures = [], progress = {}, boardChecklist = {}, limit = 24) {
+  return lectures
+    .filter((lecture) => completionPercent(lecture, progress[lecture.id]) < 100)
+    .map((lecture) => ({ lecture, matches: boardResourceMatchesForLecture(lecture, boardChecklist).slice(0, 3) }))
+    .filter((row) => row.matches.length)
+    .sort((a, b) => {
+      const priority = { high: 0, medium: 1, low: 2 };
+      return (priority[a.lecture.priority || 'medium'] - priority[b.lecture.priority || 'medium'])
+        || (a.lecture.examDate || '9999-12-31').localeCompare(b.lecture.examDate || '9999-12-31')
+        || (a.lecture.date || '').localeCompare(b.lecture.date || '')
+        || b.matches[0].score - a.matches[0].score;
+    })
+    .slice(0, limit);
 }
 
 function MissingFirebase() {
@@ -1365,6 +1629,20 @@ function ProgressBreakdown({ lectures, progress }) {
           <h2>Completion by course and exam</h2>
         </div>
       </div>
+      <HeatMapPanel
+        title="Progress heat map by course"
+        subtitle="Darker cells are closer to complete. Use this as a quick visual scan of weak areas."
+        cells={progressRowsToHeatCells(courseRows)}
+        legend="Less complete → more complete"
+      />
+
+      <HeatMapPanel
+        title="Progress heat map by exam"
+        subtitle="Visual scan of exam readiness by tagged exam group."
+        cells={progressRowsToHeatCells(examRows)}
+        legend="Less complete → more complete"
+      />
+
       <div className="progress-columns">
         <div>
           <h3>By course</h3>
@@ -1487,6 +1765,13 @@ function WeeklyReport({ selectedDate, lectures, progress }) {
         <div><span>Most behind</span><strong>{weakest?.label || 'N/A'}</strong></div>
         <div><span>Strongest</span><strong>{strongest?.label || 'N/A'}</strong></div>
       </div>
+
+      <HeatMapPanel
+        title="Weekly completion heat map"
+        subtitle="Each cell shows lecture-task completion for one day this week."
+        cells={weeklyProgressHeatCells(selectedDate, lectures, progress)}
+        legend="Less complete → more complete"
+      />
     </section>
   );
 }
@@ -2094,7 +2379,10 @@ function StudyTimeLogger({ selectedDate, lectures = [], studySessions, onSave, o
         linkedLectureTitle: linkedLecture?.title || '',
         notes: notes.trim(),
         seconds,
-        minutes: Math.round(seconds / 60)
+        minutes: Math.round(seconds / 60),
+        startedAtISO: new Date(Date.now() - (seconds * 1000)).toISOString(),
+        savedAtISO: new Date().toISOString(),
+        localStartHour: new Date(Date.now() - (seconds * 1000)).getHours()
       });
       setSubjectLecture('');
       setCourse('');
@@ -2126,6 +2414,13 @@ function StudyTimeLogger({ selectedDate, lectures = [], studySessions, onSave, o
         <div className="stat-card"><span>This week</span><strong>{formatDuration(totals.weekSeconds)}</strong></div>
         <div className="stat-card"><span>All logged</span><strong>{formatDuration(totals.allSeconds)}</strong></div>
       </div>
+
+      <HeatMapPanel
+        title="Study time heat map"
+        subtitle="Last 28 days of logged study time. Darker cells mean more total study time for that date."
+        cells={studyTimeDailyHeatCells(studySessions, logDate, 28)}
+        legend="Less time → more time"
+      />
 
       <form className="study-log-form" onSubmit={saveSession}>
         <div className="tracker-date-controls">
@@ -2283,6 +2578,13 @@ function BoardsChecklist({ boardChecklist, onSaveResource }) {
         <div className="stat-card"><span>Total video time</span><strong>{formatDuration(totalStats.totalSeconds)}</strong></div>
       </div>
 
+      <HeatMapPanel
+        title="Board resources heat map"
+        subtitle="Each cell shows completion for one board resource. Use this to see which resource is lagging."
+        cells={boardResourceHeatCells(boardChecklist)}
+        legend="Less complete → more complete"
+      />
+
       <div className="boards-resource-tabs">
         {BOARDS_CHECKLIST_RESOURCES.map((resource) => {
           const stats = resourceProgressStats(resource, boardChecklist[resource.key]);
@@ -2313,6 +2615,13 @@ function BoardsChecklist({ boardChecklist, onSaveResource }) {
           </div>
         </div>
 
+        <HeatMapPanel
+          title={`${activeResource.label} section heat map`}
+          subtitle="Completion by section/topic group inside the open resource."
+          cells={boardSectionHeatCells(activeResource, saved)}
+          legend="Less complete → more complete"
+        />
+
         <label className="boards-search-label">
           Search this resource
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search topic, video, section, or detail" />
@@ -2342,6 +2651,164 @@ function BoardsChecklist({ boardChecklist, onSaveResource }) {
             );
           })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+
+function BoardResourceMatchmaker({ lectures, progress, boardChecklist, onSelectDate }) {
+  const [query, setQuery] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
+  const rows = useMemo(() => {
+    const base = showCompleted ? lectures : lectures.filter((lecture) => completionPercent(lecture, progress[lecture.id]) < 100);
+    const q = query.trim().toLowerCase();
+    return base
+      .map((lecture) => ({ lecture, matches: boardResourceMatchesForLecture(lecture, boardChecklist).slice(0, 4) }))
+      .filter((row) => row.matches.length)
+      .filter((row) => !q || `${row.lecture.title} ${row.lecture.course} ${row.lecture.exam} ${row.matches.map((m) => m.resource.label).join(' ')}`.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const priority = { high: 0, medium: 1, low: 2 };
+        return (priority[a.lecture.priority || 'medium'] - priority[b.lecture.priority || 'medium'])
+          || (a.lecture.examDate || '9999-12-31').localeCompare(b.lecture.examDate || '9999-12-31')
+          || (a.lecture.date || '').localeCompare(b.lecture.date || '')
+          || b.matches[0].score - a.matches[0].score;
+      });
+  }, [lectures, progress, boardChecklist, query, showCompleted]);
+  const topRows = topBoardResourceMatches(lectures, progress, boardChecklist, 12);
+  const heatCells = BOARDS_CHECKLIST_RESOURCES.map((resource) => {
+    const count = rows.filter((row) => row.matches.some((match) => match.resource.key === resource.key)).length;
+    return {
+      id: resource.key,
+      label: resource.label,
+      short: resource.label.split(/\s+/).map((word) => word[0]).join('').slice(0, 4),
+      value: count,
+      display: `${count}`,
+      sub: 'matches'
+    };
+  });
+
+  return (
+    <section className="panel matchmaker-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Board resource matchmaker</p>
+          <h2>Match lectures to board resources</h2>
+          <p className="muted">Uses lecture title, course, lecture type, and your board checklist rows to suggest matching resources and likely videos/topics.</p>
+        </div>
+        <div className="score-badge">{rows.length} matched</div>
+      </div>
+
+      <HeatMapPanel
+        title="Match density heat map"
+        subtitle="Shows how often each board resource is being recommended for your current lecture list."
+        cells={heatCells}
+        legend="Fewer matches → more matches"
+      />
+
+      <div className="matchmaker-controls">
+        <label>
+          Search matches
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search lecture, course, exam, or resource" />
+        </label>
+        <label className="inline-check">
+          <input type="checkbox" checked={showCompleted} onChange={(e) => setShowCompleted(e.target.checked)} />
+          Include completed lectures
+        </label>
+      </div>
+
+      {topRows.length > 0 && (
+        <div className="matchmaker-top-card">
+          <strong>Highest-yield next matches</strong>
+          <div className="matchmaker-chip-row">
+            {topRows.slice(0, 6).map((row) => (
+              <button type="button" key={row.lecture.id} onClick={() => onSelectDate(row.lecture.date)}>
+                {row.lecture.title} → {row.matches[0].resource.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="matchmaker-list">
+        {rows.length === 0 ? <p className="muted">No matches yet. Matches improve when lecture titles are specific and your board checklist has related topic names.</p> : rows.slice(0, 60).map((row) => (
+          <article className="matchmaker-row" key={row.lecture.id}>
+            <div className="matchmaker-lecture">
+              <span>{niceDate(row.lecture.date, true)} · {row.lecture.course || 'No course'}{row.lecture.exam ? ` · ${row.lecture.exam}` : ''}</span>
+              <strong>{row.lecture.title}</strong>
+              <small>{completionPercent(row.lecture, progress[row.lecture.id])}% lecture checklist complete</small>
+              <button type="button" onClick={() => onSelectDate(row.lecture.date)}>Open lecture date</button>
+            </div>
+            <div className="matchmaker-resources">
+              {row.matches.map((match) => (
+                <div className="matchmaker-resource-card" key={`${row.lecture.id}-${match.resource.key}`}>
+                  <div>
+                    <strong>{match.resource.label}</strong>
+                    <small>{match.stats.percentItems}% checklist · {match.stats.percentSeconds || 0}% time watched</small>
+                    <ProgressBar value={match.stats.percentItems} />
+                  </div>
+                  {match.items.length > 0 && (
+                    <ul>
+                      {match.items.slice(0, 3).map((item) => <li key={item.id}>{item.title}{item.durationSeconds ? ` · ${formatDuration(item.durationSeconds)}` : ''}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BestTimeOfDayAnalytics({ studySessions }) {
+  const rows = useMemo(() => bestTimeOfDayRows(studySessions), [studySessions]);
+  const heatCells = useMemo(() => bestTimeHeatCells(studySessions), [studySessions]);
+  const best = rows[0];
+  const morning = rows.filter((row) => row.hour >= 5 && row.hour < 12).reduce((sum, row) => sum + row.seconds, 0);
+  const afternoon = rows.filter((row) => row.hour >= 12 && row.hour < 17).reduce((sum, row) => sum + row.seconds, 0);
+  const evening = rows.filter((row) => row.hour >= 17 && row.hour < 22).reduce((sum, row) => sum + row.seconds, 0);
+  const night = rows.filter((row) => row.hour < 5 || row.hour >= 22).reduce((sum, row) => sum + row.seconds, 0);
+
+  return (
+    <section className="panel best-time-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Study time analytics</p>
+          <h2>Best Time of Day Analytics</h2>
+          <p className="muted">Uses the saved time of your Study Time Log sessions. New sessions save a local start time so this heat map gets smarter over time.</p>
+        </div>
+        <div className="score-badge">{best ? best.label : 'No data yet'}</div>
+      </div>
+
+      <div className="study-summary-grid">
+        <div className="stat-card"><span>Best hour</span><strong>{best ? best.label : 'N/A'}</strong></div>
+        <div className="stat-card"><span>Morning</span><strong>{formatDuration(morning)}</strong></div>
+        <div className="stat-card"><span>Afternoon</span><strong>{formatDuration(afternoon)}</strong></div>
+        <div className="stat-card"><span>Evening/night</span><strong>{formatDuration(evening + night)}</strong></div>
+      </div>
+
+      <HeatMapPanel
+        title="Hourly study heat map"
+        subtitle="Darker cells show the times of day where you have logged the most study time."
+        cells={heatCells}
+        legend="Less time → more time"
+      />
+
+      <div className="best-time-list">
+        {rows.length === 0 ? <p className="muted">No session start-time data yet. Save new Study Time Log sessions and this will populate automatically.</p> : rows.slice(0, 8).map((row) => (
+          <article className="study-subject-row" key={row.hour}>
+            <div>
+              <strong>{row.label}</strong>
+              <small>{row.sessions} session{row.sessions === 1 ? '' : 's'} saved around this hour</small>
+            </div>
+            <div className="study-subject-meter">
+              <span>{formatDuration(row.seconds)}</span>
+              <ProgressBar value={rows[0]?.seconds ? Math.round((row.seconds / rows[0].seconds) * 100) : 0} />
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -2708,7 +3175,10 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
   const topSubject = subjectRows[0];
   const estimateRows = smartStudyEstimateRows(lectures, progress, studySessions, selectedDate);
   const estimateTotals = estimateTotalsForRows(estimateRows, selectedDate);
+  const bestHour = bestTimeOfDayRows(studySessions)[0];
+  const matchCount = topBoardResourceMatches(lectures, progress, boardChecklist, 999).length;
   const boardStats = totalBoardChecklistStats(boardChecklist);
+  const dailyScoreHeatCells = weeklyProgressHeatCells(selectedDate, lectures, progress);
   const openTodos = todos.filter((todo) => !todo.done).length;
   const visibleWidgets = widgets.filter((widget) => widget.enabled);
 
@@ -2748,6 +3218,11 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
       metric: topSubject ? topSubject.label : 'No sessions',
       detail: topSubject ? `${formatDuration(topSubject.weekSeconds)} this week` : 'Log study sessions to populate this'
     },
+    bestTimeAnalytics: {
+      eyebrow: 'Hourly heat map',
+      metric: bestHour ? bestHour.label : 'No data',
+      detail: bestHour ? `${formatDuration(bestHour.seconds)} logged at your strongest hour` : 'Save study sessions to learn your best time'
+    },
     smartEstimator: {
       eyebrow: 'Adaptive planning',
       metric: formatDuration(estimateTotals.week),
@@ -2757,6 +3232,11 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
       eyebrow: 'Board resources',
       metric: `${boardStats.completedItems}/${boardStats.totalItems}`,
       detail: `${percentFromParts(boardStats.completedItems, boardStats.totalItems)}% complete · ${formatDuration(boardStats.completedSeconds)} watched`
+    },
+    boardMatchmaker: {
+      eyebrow: 'Resource matchmaker',
+      metric: `${matchCount} matches`,
+      detail: 'Match lectures to B&B, Pathoma, Sketchy, First Aid, Physeo, and more'
     },
     todoList: {
       eyebrow: 'General tasks',
@@ -2807,6 +3287,7 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
           <span>Block completion</span>
           <strong>{overall}%</strong>
           <ProgressBar value={overall} />
+          <MiniHeatMap cells={dailyScoreHeatCells} label="Mini daily-score heat map for this week" />
         </div>
       </div>
 
@@ -2815,6 +3296,7 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
           <span>Selected date</span>
           <strong>{niceDate(selectedDate, true)}</strong>
           <small>{dayLectures.length} lecture{dayLectures.length === 1 ? '' : 's'} · {dayScore}% complete</small>
+          <MiniHeatMap cells={dailyScoreHeatCells} label="Daily score mini heat map" />
         </div>
         <div className="home-priority-card">
           <span>Overdue</span>
@@ -2982,6 +3464,7 @@ function Dashboard({ user, workspace }) {
   const overall = taskCountsForLectures(lectures, progress).percent;
   const dayScore = taskCountsForLectures(dayLectures, progress).percent;
   const recommendation = findRecommendation([...lectures], progress, selectedDate);
+  const dailyScoreHeatCells = weeklyProgressHeatCells(selectedDate, lectures, progress);
 
   async function toggleTask(lectureId, key) {
     const lecture = lectures.find((item) => item.id === lectureId);
@@ -3197,8 +3680,10 @@ function Dashboard({ user, workspace }) {
     if (activeFeature === 'examPlanner') return <ExamPlanner lectures={lectures} progress={progress} onSelectDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
     if (activeFeature === 'courseBreakdown') return <CourseBreakdown lectures={lectures} progress={progress} />;
     if (activeFeature === 'studyBySubject') return <StudyTimeBySubject selectedDate={selectedDate} studySessions={studySessions} />;
+    if (activeFeature === 'bestTimeAnalytics') return <BestTimeOfDayAnalytics studySessions={studySessions} />;
     if (activeFeature === 'smartEstimator') return <SmartStudyTimeEstimator selectedDate={selectedDate} lectures={lectures} progress={progress} studySessions={studySessions} onSelectDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
     if (activeFeature === 'boardsChecklist') return <BoardsChecklist boardChecklist={boardChecklist} onSaveResource={saveBoardResource} />;
+    if (activeFeature === 'boardMatchmaker') return <BoardResourceMatchmaker lectures={lectures} progress={progress} boardChecklist={boardChecklist} onSelectDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
     if (activeFeature === 'todoList') return <GeneralTodoList todos={todos} onAdd={addTodo} onUpdate={updateTodo} onDelete={deleteTodo} onMove={moveTodo} />;
     if (activeFeature === 'progress') return <ProgressBreakdown lectures={lectures} progress={progress} />;
     if (activeFeature === 'weeklyView') return <WeeklyView selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
@@ -3229,7 +3714,7 @@ function Dashboard({ user, workspace }) {
         <div className="stat-card"><span>Total lectures</span><strong>{lectures.length}</strong></div>
         <div className="stat-card"><span>Selected day</span><strong>{dayLectures.length}</strong></div>
         <div className="stat-card"><span>Overdue</span><strong>{overdueLectures.length}</strong></div>
-        <div className="stat-card"><span>Day score</span><strong>{dayScore}%</strong></div>
+        <div className="stat-card"><span>Day score</span><strong>{dayScore}%</strong><MiniHeatMap cells={dailyScoreHeatCells} label="Mini daily-score heat map" /></div>
         <div className="stat-card"><span>Block completion</span><strong>{overall}%</strong></div>
       </section>
 

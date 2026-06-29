@@ -1,77 +1,35 @@
-# MedTracker Patch: Adaptive Analytics + Boards Checklist + General To-Do List
+# MedTracker Heat Maps + Board Matchmaker Patch
 
-This patch keeps the adaptive estimator and analytics features and adds:
+This patch builds on the Adaptive Estimator + Exam/Course/Study Analytics + Boards Checklist + To-Do version.
 
-1. Exam Planner
-2. Course Breakdown
-3. Study Time by Subject
-4. Smart Study Time Estimator
-5. Boards Checklist from `Boards Blank Copy.xlsx`
-6. General To-Do List
+## What was added
 
-## Files included in the changed-files patch
+- Study Time Log heat map
+- Boards Checklist resource heat map
+- Boards Checklist section heat map for the active resource
+- Weekly Report heat map
+- Progress Bars heat maps by course and exam
+- Mini daily-score heat map on the homepage and top stat cards
+- Board Resource Matchmaker feature
+- Best Time of Day Analytics feature with hourly heat map
 
-Upload these to the root of the GitHub repo:
+## Files to upload to GitHub
 
-- `src/`
-- `firestore.rules`
+Upload these items from this extracted folder into the root of the GitHub repository:
+
+- `src`
 - `PATCH_INSTRUCTIONS.md`
 
-## New Boards Checklist feature
+## Deploy
 
-Adds a homepage feature titled **Boards Checklist**.
+After committing the files in GitHub, go to Netlify:
 
-It includes resource buttons for:
+Deploys → Trigger deploy → Clear cache and deploy site
 
-- Boards and Beyond
-- Sketchy Micro
-- Sketchy Pharm
-- Sketchy Path
-- First Aid
-- Pathoma
-- Pixorize
-- Physeo
-- Goljan
-- FA
+Wait for Published, then hard refresh the app.
 
-Each resource has:
+## Notes
 
-- Full checklist rows extracted from the uploaded workbook
-- Checkbox per row
-- Editable free-text notes per row
-- Percent completed
-- Percent of video/audio time completed when duration data exists
-- Total watched time and total listed time
-- Search inside each resource
-
-## New General To-Do List feature
-
-Adds a homepage feature titled **General To-Do List**.
-
-It includes:
-
-- Free-text task entry
-- Checkbox completion
-- Edit task
-- Delete task
-- Move task up/down
-- Completion statistics
-
-## Firestore rules
-
-This patch adds two workspace subcollections:
-
-- `boardsChecklist`
-- `todoItems`
-
-If your current Firebase rules are strict, publish the included `firestore.rules` file in Firebase:
-
-Firebase Console → Firestore Database → Rules → paste contents → Publish
-
-## Netlify deploy
-
-After uploading to GitHub:
-
-Netlify → Deploys → Trigger deploy → Clear cache and deploy site
-
-Keep your existing Netlify secrets-scan variables if they were needed previously.
+- New Study Time Log sessions now store local start-time metadata so Best Time of Day Analytics improves over time.
+- Older study sessions may not have exact start-time metadata, but the rest of the Study Time analytics still work.
+- No new Firestore collections were added in this patch. Existing Firestore rules from the Boards Checklist + To-Do version should continue to work.
