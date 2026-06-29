@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
 import { parseCalendarCsv, todayISO } from './csvImport.js';
+import { BOARDS_CHECKLIST_RESOURCES } from './boardsChecklistData.js';
 
 const CORE_TASKS = [
   { key: 'firstPass', legacyKeys: ['watched'], label: '1. First Pass (watched lecture)', group: 'Core' },
@@ -48,6 +49,12 @@ const DEFAULT_DASHBOARD_WIDGETS = [
   { id: 'pomodoro', label: 'Focus Timer', enabled: true },
   { id: 'qbank', label: 'Dr. Stephens Boards Tracker', enabled: true },
   { id: 'studyTime', label: 'Study Time Log', enabled: true },
+  { id: 'examPlanner', label: 'Exam Planner', enabled: true },
+  { id: 'courseBreakdown', label: 'Course Breakdown', enabled: true },
+  { id: 'studyBySubject', label: 'Study Time by Subject', enabled: true },
+  { id: 'smartEstimator', label: 'Smart Study Time Estimator', enabled: true },
+  { id: 'boardsChecklist', label: 'Boards Checklist', enabled: true },
+  { id: 'todoList', label: 'General To-Do List', enabled: true },
   { id: 'progress', label: 'Progress Bars', enabled: true },
   { id: 'weeklyView', label: 'Weekly View', enabled: true },
   { id: 'weeklyReport', label: 'Weekly Report', enabled: true },
@@ -259,6 +266,90 @@ function groupProgress(lectures, progress, key) {
   return Array.from(groups.entries())
     .map(([label, items]) => ({ label, count: items.length, ...taskCountsForLectures(items, progress) }))
     .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function corePassCounts(lectures, progress) {
+  const total = lectures.length;
+  const first = lectures.filter((lecture) => taskCompleted(progress[lecture.id], CORE_TASKS[0])).length;
+  const second = lectures.filter((lecture) => taskCompleted(progress[lecture.id], CORE_TASKS[1])).length;
+  const third = lectures.filter((lecture) => taskCompleted(progress[lecture.id], CORE_TASKS[2])).length;
+  return {
+    total,
+    first,
+    second,
+    third,
+    firstPercent: total ? Math.round((first / total) * 100) : 0,
+    secondPercent: total ? Math.round((second / total) * 100) : 0,
+    thirdPercent: total ? Math.round((third / total) * 100) : 0
+  };
+}
+
+function examSummaries(lectures, progress) {
+  const map = new Map();
+  lectures.forEach((lecture) => {
+    const exam = (lecture.exam || '').trim();
+    if (!exam) return;
+    if (!map.has(exam)) map.set(exam, []);
+    map.get(exam).push(lecture);
+  });
+
+  return Array.from(map.entries()).map(([exam, items]) => {
+    const dates = items.map((item) => item.examDate).filter(Boolean).sort();
+    const examDate = dates[0] || '';
+    const taskCounts = taskCountsForLectures(items, progress);
+    const passes = corePassCounts(items, progress);
+    const incomplete = [...items]
+      .filter((lecture) => completionPercent(lecture, progress[lecture.id]) < 100)
+      .sort((a, b) => {
+        const priorityScore = { high: 0, medium: 1, low: 2 };
+        return (priorityScore[a.priority || 'medium'] - priorityScore[b.priority || 'medium']) || (a.date || '').localeCompare(b.date || '');
+      });
+    return {
+      exam,
+      examDate,
+      days: examDate ? daysBetween(todayISO(), examDate) : null,
+      items,
+      incomplete,
+      courses: groupProgress(items, progress, 'course').filter((row) => row.label !== 'No course'),
+      ...taskCounts,
+      passes
+    };
+  }).sort((a, b) => (a.examDate || '9999-12-31').localeCompare(b.examDate || '9999-12-31') || a.exam.localeCompare(b.exam));
+}
+
+function courseBreakdownRows(lectures, progress) {
+  const map = new Map();
+  lectures.forEach((lecture) => {
+    const course = (lecture.course || 'No course').trim() || 'No course';
+    if (!map.has(course)) map.set(course, []);
+    map.get(course).push(lecture);
+  });
+
+  return Array.from(map.entries()).map(([label, items]) => ({
+    label,
+    count: items.length,
+    ...taskCountsForLectures(items, progress),
+    passes: corePassCounts(items, progress),
+    highPriorityOpen: items.filter((lecture) => (lecture.priority || '').toLowerCase() === 'high' && completionPercent(lecture, progress[lecture.id]) < 100).length
+  })).sort((a, b) => a.percent - b.percent || a.label.localeCompare(b.label));
+}
+
+function studyTimeBySubjectRows(sessions = [], selectedDate = todayISO()) {
+  const dates = weekDates(selectedDate || todayISO());
+  const map = new Map();
+
+  sessions.forEach((session) => {
+    const label = (session.subjectLecture || session.subject || 'Unlabeled study time').trim() || 'Unlabeled study time';
+    if (!map.has(label)) map.set(label, { label, todaySeconds: 0, weekSeconds: 0, allSeconds: 0, count: 0 });
+    const row = map.get(label);
+    const seconds = secondsFromStudySession(session);
+    row.allSeconds += seconds;
+    row.count += 1;
+    if (session.date === selectedDate) row.todaySeconds += seconds;
+    if (dates.includes(session.date)) row.weekSeconds += seconds;
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.weekSeconds - a.weekSeconds || b.allSeconds - a.allSeconds || a.label.localeCompare(b.label));
 }
 
 async function commitDeletesInChunks(refs) {
@@ -1041,6 +1132,225 @@ function ExamCards({ lectures, progress, onSelectDate }) {
   );
 }
 
+
+function ExamPlanner({ lectures, progress, onSelectDate }) {
+  const exams = useMemo(() => examSummaries(lectures, progress), [lectures, progress]);
+
+  if (!exams.length) {
+    return (
+      <section className="panel planner-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Exam planner</p>
+            <h2>No exam-tagged lectures yet</h2>
+            <p className="muted">Add exam and exam date columns to your CSV, or edit a lecture and add its exam name/date.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel planner-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Exam planner</p>
+          <h2>Readiness by upcoming exam</h2>
+          <p className="muted">Track lectures, passes, high-priority gaps, and course progress for each exam.</p>
+        </div>
+      </div>
+
+      <div className="exam-planner-grid">
+        {exams.map((exam) => {
+          const dayLabel = exam.days === null ? 'Date missing' : exam.days < 0 ? 'Exam passed' : `${exam.days} day${exam.days === 1 ? '' : 's'} left`;
+          return (
+            <article className="exam-planner-card" key={exam.exam}>
+              <div className="exam-planner-top">
+                <div>
+                  <span>{exam.examDate ? niceDate(exam.examDate, true) : 'No exam date'}</span>
+                  <h3>{exam.exam}</h3>
+                  <small>{exam.items.length} lecture{exam.items.length === 1 ? '' : 's'} · {dayLabel}</small>
+                </div>
+                <div className="readiness-circle"><strong>{exam.percent}%</strong><span>ready</span></div>
+              </div>
+
+              <ProgressBar value={exam.percent} />
+
+              <div className="pass-mini-grid">
+                <div><span>First Pass</span><strong>{exam.passes.first}/{exam.passes.total}</strong></div>
+                <div><span>Second Pass</span><strong>{exam.passes.second}/{exam.passes.total}</strong></div>
+                <div><span>Third Pass</span><strong>{exam.passes.third}/{exam.passes.total}</strong></div>
+              </div>
+
+              <div className="exam-course-list">
+                <strong>Course breakdown</strong>
+                {exam.courses.slice(0, 4).map((course) => (
+                  <div className="compact-progress-row" key={`${exam.exam}-${course.label}`}>
+                    <span>{course.label}</span>
+                    <small>{course.percent}%</small>
+                    <ProgressBar value={course.percent} />
+                  </div>
+                ))}
+              </div>
+
+              <div className="unfinished-list">
+                <strong>Next gaps to close</strong>
+                {exam.incomplete.length === 0 ? <small>All exam-linked lecture tasks are complete.</small> : exam.incomplete.slice(0, 5).map((lecture) => (
+                  <button type="button" key={lecture.id} onClick={() => onSelectDate(lecture.date)}>
+                    <span>{lecture.priority || 'medium'} · {lecture.course || 'Course'}</span>
+                    <small>{lecture.title}</small>
+                  </button>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CourseBreakdown({ lectures, progress }) {
+  const rows = useMemo(() => courseBreakdownRows(lectures, progress), [lectures, progress]);
+
+  if (!rows.length) {
+    return (
+      <section className="panel course-panel">
+        <div className="panel-heading"><div><p className="eyebrow">Course breakdown</p><h2>No courses found yet</h2></div></div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel course-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Course breakdown</p>
+          <h2>Completion by course</h2>
+          <p className="muted">Courses are sorted from most behind to most complete.</p>
+        </div>
+      </div>
+      <div className="course-breakdown-list">
+        {rows.map((row) => (
+          <article className="course-breakdown-card" key={row.label}>
+            <div className="course-card-head">
+              <div><h3>{row.label}</h3><small>{row.count} lecture{row.count === 1 ? '' : 's'} · {row.highPriorityOpen} high-priority open</small></div>
+              <strong>{row.percent}%</strong>
+            </div>
+            <ProgressBar value={row.percent} />
+            <div className="pass-mini-grid course-passes">
+              <div><span>First</span><strong>{row.passes.first}/{row.passes.total}</strong><small>{row.passes.firstPercent}%</small></div>
+              <div><span>Second</span><strong>{row.passes.second}/{row.passes.total}</strong><small>{row.passes.secondPercent}%</small></div>
+              <div><span>Third</span><strong>{row.passes.third}/{row.passes.total}</strong><small>{row.passes.thirdPercent}%</small></div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function StudyTimeBySubject({ selectedDate, studySessions }) {
+  const rows = useMemo(() => studyTimeBySubjectRows(studySessions, selectedDate), [studySessions, selectedDate]);
+  const weekTotal = rows.reduce((sum, row) => sum + row.weekSeconds, 0);
+  const allTotal = rows.reduce((sum, row) => sum + row.allSeconds, 0);
+
+  return (
+    <section className="panel study-subject-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Study time by subject</p>
+          <h2>Where your study time is going</h2>
+          <p className="muted">Based on the subject/lecture field in your Study Time Log.</p>
+        </div>
+        <div className="score-badge">{formatDuration(weekTotal)} this week</div>
+      </div>
+
+      <div className="report-grid study-summary-grid">
+        <div><span>Selected day</span><strong>{formatDuration(rows.reduce((sum, row) => sum + row.todaySeconds, 0))}</strong></div>
+        <div><span>This week</span><strong>{formatDuration(weekTotal)}</strong></div>
+        <div><span>All time</span><strong>{formatDuration(allTotal)}</strong></div>
+        <div><span>Subjects logged</span><strong>{rows.length}</strong></div>
+      </div>
+
+      <div className="study-subject-list">
+        {rows.length === 0 ? <p className="muted">No study sessions logged yet. Open Study Time Log to start tracking.</p> : rows.map((row) => {
+          const pct = weekTotal ? Math.round((row.weekSeconds / weekTotal) * 100) : 0;
+          return (
+            <article className="study-subject-row" key={row.label}>
+              <div>
+                <strong>{row.label}</strong>
+                <small>{row.count} session{row.count === 1 ? '' : 's'} · {formatDuration(row.todaySeconds)} selected day · {formatDuration(row.allSeconds)} all time</small>
+              </div>
+              <div className="study-subject-meter">
+                <span>{formatDuration(row.weekSeconds)}</span>
+                <ProgressBar value={pct} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+
+function SmartStudyTimeEstimator({ selectedDate, lectures, progress, studySessions, onSelectDate }) {
+  const rows = useMemo(
+    () => smartStudyEstimateRows(lectures, progress, studySessions, selectedDate),
+    [lectures, progress, studySessions, selectedDate]
+  );
+  const totals = estimateTotalsForRows(rows, selectedDate);
+  const model = useMemo(() => buildStudyEstimateModel(studySessions, lectures, selectedDate), [studySessions, lectures, selectedDate]);
+  const courseCount = Array.from(model.course.values()).reduce((sum, row) => sum + row.count, 0);
+  const typeCount = Array.from(model.type.values()).reduce((sum, row) => sum + row.count, 0);
+
+  return (
+    <section className="panel estimator-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Adaptive time estimation</p>
+          <h2>Smart Study Time Estimator</h2>
+          <p className="muted">Uses your Study Time Log to estimate future lecture workload by course, lecture type, recent pace, and linked lecture history.</p>
+        </div>
+        <div className="score-badge">{formatDuration(totals.week)} this week</div>
+      </div>
+
+      <div className="study-summary-grid estimator-summary-grid">
+        <div className="stat-card"><span>Today estimated</span><strong>{formatDuration(totals.today)}</strong></div>
+        <div className="stat-card"><span>This week estimated</span><strong>{formatDuration(totals.week)}</strong></div>
+        <div className="stat-card"><span>Remaining estimated</span><strong>{formatDuration(totals.all)}</strong></div>
+        <div className="stat-card"><span>Logged samples</span><strong>{studySessions.length}</strong></div>
+      </div>
+
+      <div className="estimator-explain-card">
+        <strong>Algorithm</strong>
+        <p>Estimate = linked lecture history + course/type average + course average + lecture-type average + recent 7-day pace. Confidence rises as more matching sessions are logged.</p>
+        <small>{courseCount} course samples · {typeCount} lecture-type samples · {model.all ? formatDuration(model.all.seconds) : '0m'} average logged session</small>
+      </div>
+
+      <div className="estimator-list">
+        {rows.length === 0 ? (
+          <p className="muted">No incomplete lectures to estimate. Log study sessions and keep lectures assigned to courses/types to make the estimator smarter.</p>
+        ) : rows.slice(0, 24).map((row) => (
+          <article className="estimator-row" key={row.lecture.id}>
+            <div className="estimator-main">
+              <span>{niceDate(row.lecture.date, true)} · {row.lecture.course || 'No course'} · {row.lecture.lectureType || 'lecture'}</span>
+              <strong>{row.lecture.title}</strong>
+              <small>{row.basis}</small>
+            </div>
+            <div className="estimator-metric">
+              <strong>{formatDuration(row.seconds)}</strong>
+              <span className={`confidence-pill ${row.confidence.toLowerCase()}`}>{row.confidence}</span>
+              <button type="button" onClick={() => onSelectDate(row.lecture.date)}>Open date</button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ProgressBreakdown({ lectures, progress }) {
   const courseRows = groupProgress(lectures, progress, 'course').filter((row) => row.label !== 'No course');
   const examRows = groupProgress(lectures, progress, 'exam').filter((row) => row.label !== 'No exam');
@@ -1240,6 +1550,43 @@ function formatDuration(seconds = 0) {
   return `${minutes}m ${String(secs).padStart(2, '0')}s`;
 }
 
+
+function resourceProgressStats(resource, saved = {}) {
+  const completed = saved.completed || {};
+  const items = resource?.items || [];
+  const totalItems = items.length;
+  const completedItems = items.filter((item) => Boolean(completed[item.id])).length;
+  const totalSeconds = items.reduce((sum, item) => sum + numberOrZero(item.durationSeconds), 0);
+  const completedSeconds = items.reduce((sum, item) => sum + (completed[item.id] ? numberOrZero(item.durationSeconds) : 0), 0);
+  return {
+    totalItems,
+    completedItems,
+    percentItems: totalItems ? Math.round((completedItems / totalItems) * 100) : 0,
+    totalSeconds,
+    completedSeconds,
+    percentSeconds: totalSeconds ? Math.round((completedSeconds / totalSeconds) * 100) : 0
+  };
+}
+
+function totalBoardChecklistStats(boardChecklist = {}) {
+  return BOARDS_CHECKLIST_RESOURCES.reduce((acc, resource) => {
+    const stats = resourceProgressStats(resource, boardChecklist[resource.key]);
+    acc.totalItems += stats.totalItems;
+    acc.completedItems += stats.completedItems;
+    acc.totalSeconds += stats.totalSeconds;
+    acc.completedSeconds += stats.completedSeconds;
+    return acc;
+  }, { totalItems: 0, completedItems: 0, totalSeconds: 0, completedSeconds: 0 });
+}
+
+function percentFromParts(part, whole) {
+  return whole ? Math.round((part / whole) * 100) : 0;
+}
+
+function nextTodoPosition(items = []) {
+  return items.reduce((max, item) => Math.max(max, Number(item.position) || 0), 0) + 1;
+}
+
 function formatTimerClock(seconds = 0) {
   const total = Math.max(0, Math.round(Number(seconds) || 0));
   const hours = Math.floor(total / 3600);
@@ -1266,6 +1613,180 @@ function studySessionTotals(sessions = [], selectedDate = todayISO()) {
     .reduce((sum, session) => sum + secondsFromStudySession(session), 0);
   const allSeconds = sessions.reduce((sum, session) => sum + secondsFromStudySession(session), 0);
   return { todaySeconds, weekSeconds, allSeconds };
+}
+
+function normalizeEstimatorKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizedLectureType(value) {
+  const text = normalizeEstimatorKey(value);
+  if (!text) return 'lecture';
+  if (text.includes('practical')) return 'practical';
+  if (text.includes('lab')) return 'lab';
+  if (text.includes('exam')) return 'exam';
+  if (text.includes('sdl')) return 'sdl';
+  return LECTURE_TYPES.includes(text) ? text : 'lecture';
+}
+
+function sessionLinkedLecture(session = {}, lectures = []) {
+  if (session.linkedLectureId) {
+    const linked = lectures.find((lecture) => lecture.id === session.linkedLectureId);
+    if (linked) return linked;
+  }
+
+  const subject = normalizeEstimatorKey(session.subjectLecture || session.subject || '');
+  if (!subject || subject.length < 4) return null;
+
+  return lectures.find((lecture) => normalizeEstimatorKey(lecture.title) === subject)
+    || lectures.find((lecture) => {
+      const title = normalizeEstimatorKey(lecture.title);
+      return title.length >= 6 && (subject.includes(title) || title.includes(subject));
+    })
+    || null;
+}
+
+function sessionCourseLabel(session = {}, lectures = []) {
+  const linked = sessionLinkedLecture(session, lectures);
+  return (session.course || linked?.course || 'No course').trim() || 'No course';
+}
+
+function sessionLectureTypeLabel(session = {}, lectures = []) {
+  const linked = sessionLinkedLecture(session, lectures);
+  return normalizedLectureType(session.lectureType || linked?.lectureType || 'lecture');
+}
+
+function addEstimatorSample(map, key, seconds) {
+  const normalized = normalizeEstimatorKey(key);
+  if (!normalized || seconds <= 0) return;
+  if (!map.has(normalized)) map.set(normalized, { seconds: 0, count: 0 });
+  const row = map.get(normalized);
+  row.seconds += seconds;
+  row.count += 1;
+}
+
+function averageFromMap(map, key) {
+  const row = map.get(normalizeEstimatorKey(key));
+  if (!row || !row.count) return null;
+  return { seconds: row.seconds / row.count, count: row.count };
+}
+
+function clampEstimateSeconds(seconds) {
+  const value = Number(seconds) || 0;
+  return Math.max(15 * 60, Math.min(5 * 60 * 60, Math.round(value)));
+}
+
+function buildStudyEstimateModel(sessions = [], lectures = [], selectedDate = todayISO()) {
+  const course = new Map();
+  const type = new Map();
+  const courseType = new Map();
+  const lecture = new Map();
+  const recent = new Map();
+  const recentDates = weekDates(selectedDate || todayISO());
+  let allSeconds = 0;
+  let allCount = 0;
+
+  sessions.forEach((session) => {
+    const seconds = secondsFromStudySession(session);
+    if (seconds <= 0) return;
+    const linked = sessionLinkedLecture(session, lectures);
+    const courseLabel = (session.course || linked?.course || 'No course').trim() || 'No course';
+    const typeLabel = normalizedLectureType(session.lectureType || linked?.lectureType || 'lecture');
+    const courseTypeKey = `${courseLabel}::${typeLabel}`;
+    const subjectLabel = (session.subjectLecture || linked?.title || '').trim();
+
+    addEstimatorSample(course, courseLabel, seconds);
+    addEstimatorSample(type, typeLabel, seconds);
+    addEstimatorSample(courseType, courseTypeKey, seconds);
+    if (subjectLabel) addEstimatorSample(lecture, subjectLabel, seconds);
+    if (linked?.title) addEstimatorSample(lecture, linked.title, seconds);
+    if (recentDates.includes(session.date)) addEstimatorSample(recent, 'recent', seconds);
+    allSeconds += seconds;
+    allCount += 1;
+  });
+
+  return {
+    course,
+    type,
+    courseType,
+    lecture,
+    recent,
+    all: allCount ? { seconds: allSeconds / allCount, count: allCount } : null
+  };
+}
+
+function estimateLectureSeconds(lecture = {}, model) {
+  const courseLabel = (lecture.course || 'No course').trim() || 'No course';
+  const typeLabel = normalizedLectureType(lecture.lectureType || 'lecture');
+  const courseTypeKey = `${courseLabel}::${typeLabel}`;
+  const linked = averageFromMap(model.lecture, lecture.title);
+  const courseType = averageFromMap(model.courseType, courseTypeKey);
+  const course = averageFromMap(model.course, courseLabel);
+  const type = averageFromMap(model.type, typeLabel);
+  const recent = averageFromMap(model.recent, 'recent');
+  const fallback = lecture.estimatedMinutes ? { seconds: numberOrZero(lecture.estimatedMinutes) * 60, count: 0 } : model.all;
+
+  const pieces = [];
+  if (linked) pieces.push({ label: 'same/linked lecture', weight: 45, ...linked });
+  if (courseType) pieces.push({ label: `${courseLabel} ${typeLabel}`, weight: linked ? 30 : 45, ...courseType });
+  if (course) pieces.push({ label: `${courseLabel} course`, weight: 25, ...course });
+  if (type) pieces.push({ label: `${typeLabel} type`, weight: 20, ...type });
+  if (recent) pieces.push({ label: 'recent pace', weight: 10, ...recent });
+  if (!pieces.length && fallback) pieces.push({ label: lecture.estimatedMinutes ? 'CSV estimate' : 'all logged sessions', weight: 1, ...fallback });
+
+  if (!pieces.length) {
+    return {
+      seconds: 60 * 60,
+      minutes: 60,
+      confidence: 'Low',
+      samples: 0,
+      basis: 'No study time history yet; using a 60 minute starter estimate.'
+    };
+  }
+
+  const weightTotal = pieces.reduce((sum, piece) => sum + piece.weight, 0);
+  const seconds = clampEstimateSeconds(pieces.reduce((sum, piece) => sum + piece.seconds * piece.weight, 0) / weightTotal);
+  const samples = pieces.reduce((sum, piece) => sum + (piece.count || 0), 0);
+  let confidence = 'Low';
+  if ((courseType?.count || 0) >= 4 || samples >= 10) confidence = 'High';
+  else if ((courseType?.count || 0) >= 2 || samples >= 4) confidence = 'Medium';
+
+  const basis = pieces.slice(0, 3).map((piece) => `${piece.label}: ${formatDuration(piece.seconds)}`).join(' · ');
+  return { seconds, minutes: Math.round(seconds / 60), confidence, samples, basis };
+}
+
+function smartStudyEstimateRows(lectures = [], progress = {}, studySessions = [], selectedDate = todayISO()) {
+  const model = buildStudyEstimateModel(studySessions, lectures, selectedDate);
+  return lectures
+    .filter((lecture) => completionPercent(lecture, progress[lecture.id]) < 100)
+    .map((lecture) => ({
+      lecture,
+      ...estimateLectureSeconds(lecture, model)
+    }))
+    .sort((a, b) => {
+      const today = selectedDate || todayISO();
+      const dateA = a.lecture.date || '9999-12-31';
+      const dateB = b.lecture.date || '9999-12-31';
+      const overdueA = dateA < today ? -2 : 0;
+      const overdueB = dateB < today ? -2 : 0;
+      const selectedA = dateA === today ? -1 : 0;
+      const selectedB = dateB === today ? -1 : 0;
+      const priority = { high: 0, medium: 1, low: 2 };
+      return (overdueA + selectedA) - (overdueB + selectedB)
+        || (priority[a.lecture.priority || 'medium'] - priority[b.lecture.priority || 'medium'])
+        || dateA.localeCompare(dateB)
+        || a.lecture.title.localeCompare(b.lecture.title);
+    });
+}
+
+function estimateTotalsForRows(rows = [], selectedDate = todayISO()) {
+  const week = weekDates(selectedDate || todayISO());
+  return rows.reduce((acc, row) => {
+    acc.all += row.seconds;
+    if (row.lecture.date === selectedDate) acc.today += row.seconds;
+    if (week.includes(row.lecture.date)) acc.week += row.seconds;
+    return acc;
+  }, { today: 0, week: 0, all: 0 });
 }
 
 function DrStephensBoardsTracker({ selectedDate, qbankDays, onSave }) {
@@ -1499,9 +2020,13 @@ function DrStephensBoardsTracker({ selectedDate, qbankDays, onSave }) {
 }
 
 
-function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
+
+function StudyTimeLogger({ selectedDate, lectures = [], studySessions, onSave, onDelete }) {
   const [logDate, setLogDate] = useState(selectedDate || todayISO());
   const [subjectLecture, setSubjectLecture] = useState('');
+  const [course, setCourse] = useState('');
+  const [lectureType, setLectureType] = useState('lecture');
+  const [linkedLectureId, setLinkedLectureId] = useState('');
   const [notes, setNotes] = useState('');
   const [seconds, setSeconds] = useState(0);
   const [running, setRunning] = useState(false);
@@ -1523,6 +2048,8 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
     [studySessions, logDate]
   );
   const totals = studySessionTotals(studySessions, logDate);
+  const lectureOptions = useMemo(() => [...lectures].sort((a, b) => `${a.date || ''} ${a.course || ''} ${a.title || ''}`.localeCompare(`${b.date || ''} ${b.course || ''} ${b.title || ''}`)), [lectures]);
+  const courseOptions = useMemo(() => Array.from(new Set(lectures.map((lecture) => lecture.course).filter(Boolean))).sort(), [lectures]);
   const dateOptions = [
     { label: `Today — ${niceDate(todayISO(), true)}`, value: todayISO() },
     { label: `Selected app date — ${niceDate(selectedDate, true)}`, value: selectedDate },
@@ -1531,6 +2058,16 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
 
   function addManualMinutes(minutes) {
     setSeconds((current) => current + Math.max(0, numberOrZero(minutes) * 60));
+  }
+
+  function chooseLinkedLecture(id) {
+    setLinkedLectureId(id);
+    const lecture = lectures.find((item) => item.id === id);
+    if (!lecture) return;
+    setSubjectLecture(lecture.title || '');
+    setCourse(lecture.course || '');
+    setLectureType(normalizedLectureType(lecture.lectureType || 'lecture'));
+    if (lecture.date) setLogDate(lecture.date);
   }
 
   async function saveSession(e) {
@@ -1547,17 +2084,25 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
     setSaving(true);
     setRunning(false);
     try {
+      const linkedLecture = lectures.find((item) => item.id === linkedLectureId);
       await onSave({
         date: logDate,
         subjectLecture: subjectLecture.trim(),
+        course: (course || linkedLecture?.course || '').trim(),
+        lectureType: normalizedLectureType(lectureType || linkedLecture?.lectureType || 'lecture'),
+        linkedLectureId: linkedLectureId || '',
+        linkedLectureTitle: linkedLecture?.title || '',
         notes: notes.trim(),
         seconds,
         minutes: Math.round(seconds / 60)
       });
       setSubjectLecture('');
+      setCourse('');
+      setLectureType('lecture');
+      setLinkedLectureId('');
       setNotes('');
       setSeconds(0);
-      setMessage('Study session saved.');
+      setMessage('Study session saved. Future lecture estimates will update from this data.');
     } catch (err) {
       setMessage(err.message || 'Could not save study session.');
     } finally {
@@ -1571,7 +2116,7 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
         <div>
           <p className="eyebrow">Study time</p>
           <h2>Study Time Log</h2>
-          <p className="muted">Track focused study time by subject, lecture, and notes. Saved sessions sync across devices.</p>
+          <p className="muted">Track focused study time by subject, lecture, course, lecture type, and notes. These sessions power the Smart Study Time Estimator.</p>
         </div>
         <div className="score-badge">{formatDuration(totals.todaySeconds)} today</div>
       </div>
@@ -1597,9 +2142,35 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
         </div>
 
         <label>
+          Link to saved lecture optional
+          <select value={linkedLectureId} onChange={(e) => chooseLinkedLecture(e.target.value)}>
+            <option value="">Manual entry / no linked lecture</option>
+            {lectureOptions.map((lecture) => (
+              <option key={lecture.id} value={lecture.id}>{niceDate(lecture.date, true)} · {lecture.course || 'No course'} · {lecture.title}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
           Subject / lecture
           <input value={subjectLecture} onChange={(e) => setSubjectLecture(e.target.value)} placeholder="Example: Renal clearance, PUD, Anatomy lab review" />
         </label>
+
+        <div className="study-meta-grid">
+          <label>
+            Course / class
+            <input list="study-course-options" value={course} onChange={(e) => setCourse(e.target.value)} placeholder="Example: Pathology, Anatomy, OMM" />
+            <datalist id="study-course-options">
+              {courseOptions.map((option) => <option key={option} value={option} />)}
+            </datalist>
+          </label>
+          <label>
+            Lecture type
+            <select value={lectureType} onChange={(e) => setLectureType(e.target.value)}>
+              {LECTURE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+        </div>
 
         <label>
           Notes
@@ -1639,13 +2210,220 @@ function StudyTimeLogger({ selectedDate, studySessions, onSave, onDelete }) {
             <article className="study-session-row" key={session.id}>
               <div>
                 <strong>{session.subjectLecture}</strong>
-                <small>{niceDate(session.date, true)} · {formatDuration(secondsFromStudySession(session))}</small>
+                <small>{niceDate(session.date, true)} · {formatDuration(secondsFromStudySession(session))}{session.course ? ` · ${session.course}` : ''}{session.lectureType ? ` · ${session.lectureType}` : ''}</small>
                 {session.notes && <p>{session.notes}</p>}
               </div>
               <button type="button" className="danger-btn" onClick={() => onDelete(session.id)}>Delete</button>
             </article>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+
+function BoardsChecklist({ boardChecklist, onSaveResource }) {
+  const [activeResourceKey, setActiveResourceKey] = useState(BOARDS_CHECKLIST_RESOURCES[0]?.key || '');
+  const [search, setSearch] = useState('');
+  const [noteDrafts, setNoteDrafts] = useState({});
+  const activeResource = BOARDS_CHECKLIST_RESOURCES.find((resource) => resource.key === activeResourceKey) || BOARDS_CHECKLIST_RESOURCES[0];
+  const saved = boardChecklist[activeResource?.key] || { completed: {}, notes: {} };
+  const totalStats = totalBoardChecklistStats(boardChecklist);
+  const activeStats = resourceProgressStats(activeResource, saved);
+
+  useEffect(() => {
+    if (!activeResource) return;
+    setNoteDrafts(saved.notes || {});
+  }, [activeResource?.key, saved.notes]);
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return activeResource?.items || [];
+    return (activeResource?.items || []).filter((item) => `${item.title} ${item.section} ${item.detail}`.toLowerCase().includes(q));
+  }, [activeResource, search]);
+
+  async function toggleItem(itemId) {
+    const next = {
+      ...saved,
+      completed: { ...(saved.completed || {}), [itemId]: !saved.completed?.[itemId] },
+      notes: { ...(saved.notes || {}), ...noteDrafts }
+    };
+    await onSaveResource(activeResource.key, next);
+  }
+
+  async function saveNote(itemId) {
+    const next = {
+      ...saved,
+      completed: { ...(saved.completed || {}) },
+      notes: { ...(saved.notes || {}), ...noteDrafts, [itemId]: noteDrafts[itemId] || '' }
+    };
+    await onSaveResource(activeResource.key, next);
+  }
+
+  if (!activeResource) {
+    return <section className="panel"><p className="muted">No board resources loaded.</p></section>;
+  }
+
+  return (
+    <section className="panel boards-checklist-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Boards checklist</p>
+          <h2>Boards Checklist</h2>
+          <p className="muted">Track board resources from the uploaded workbook. Open one resource at a time, check off videos/topics, and add editable notes next to each row.</p>
+        </div>
+        <div className="score-badge">{percentFromParts(totalStats.completedItems, totalStats.totalItems)}% overall</div>
+      </div>
+
+      <div className="study-summary-grid boards-overall-grid">
+        <div className="stat-card"><span>Overall items</span><strong>{totalStats.completedItems}/{totalStats.totalItems}</strong></div>
+        <div className="stat-card"><span>Overall completion</span><strong>{percentFromParts(totalStats.completedItems, totalStats.totalItems)}%</strong></div>
+        <div className="stat-card"><span>Video time watched</span><strong>{formatDuration(totalStats.completedSeconds)}</strong></div>
+        <div className="stat-card"><span>Total video time</span><strong>{formatDuration(totalStats.totalSeconds)}</strong></div>
+      </div>
+
+      <div className="boards-resource-tabs">
+        {BOARDS_CHECKLIST_RESOURCES.map((resource) => {
+          const stats = resourceProgressStats(resource, boardChecklist[resource.key]);
+          return (
+            <button
+              type="button"
+              key={resource.key}
+              className={resource.key === activeResource.key ? 'boards-resource-tab active' : 'boards-resource-tab'}
+              onClick={() => setActiveResourceKey(resource.key)}
+            >
+              <strong>{resource.label}</strong>
+              <span>{stats.completedItems}/{stats.totalItems} · {stats.percentItems}%</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="boards-active-card">
+        <div className="boards-active-header">
+          <div>
+            <p className="eyebrow">Open resource</p>
+            <h3>{activeResource.label}</h3>
+            <p className="muted">{activeStats.completedItems}/{activeStats.totalItems} items complete · {formatDuration(activeStats.completedSeconds)} / {formatDuration(activeStats.totalSeconds)} watched</p>
+          </div>
+          <div className="boards-stat-stack">
+            <div><span>Checklist</span><strong>{activeStats.percentItems}%</strong><ProgressBar value={activeStats.percentItems} /></div>
+            <div><span>Video time</span><strong>{activeStats.totalSeconds ? `${activeStats.percentSeconds}%` : 'N/A'}</strong><ProgressBar value={activeStats.percentSeconds} /></div>
+          </div>
+        </div>
+
+        <label className="boards-search-label">
+          Search this resource
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search topic, video, section, or detail" />
+        </label>
+
+        <div className="boards-checklist-table">
+          {filteredItems.length === 0 ? (
+            <p className="muted">No rows match that search.</p>
+          ) : filteredItems.map((item) => {
+            const checked = Boolean(saved.completed?.[item.id]);
+            return (
+              <article className={checked ? 'boards-checklist-row done' : 'boards-checklist-row'} key={item.id}>
+                <label className="boards-check-main">
+                  <input type="checkbox" checked={checked} onChange={() => toggleItem(item.id)} />
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.section || 'General'}{item.durationSeconds ? ` · ${formatDuration(item.durationSeconds)}` : ''}{item.detail ? ` · ${item.detail}` : ''}</small>
+                  </span>
+                </label>
+                <textarea
+                  value={noteDrafts[item.id] || ''}
+                  onChange={(e) => setNoteDrafts((current) => ({ ...current, [item.id]: e.target.value }))}
+                  onBlur={() => saveNote(item.id)}
+                  placeholder="Add notes…"
+                />
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GeneralTodoList({ todos, onAdd, onUpdate, onDelete, onMove }) {
+  const [text, setText] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [editingText, setEditingText] = useState('');
+  const openCount = todos.filter((todo) => !todo.done).length;
+  const completedCount = todos.filter((todo) => todo.done).length;
+  const percent = todos.length ? Math.round((completedCount / todos.length) * 100) : 0;
+
+  async function submitTodo(e) {
+    e.preventDefault();
+    if (!text.trim()) return;
+    await onAdd(text.trim());
+    setText('');
+  }
+
+  function startEditing(todo) {
+    setEditingId(todo.id);
+    setEditingText(todo.text || '');
+  }
+
+  async function saveEdit(todoId) {
+    if (!editingText.trim()) return;
+    await onUpdate(todoId, { text: editingText.trim() });
+    setEditingId('');
+    setEditingText('');
+  }
+
+  return (
+    <section className="panel todo-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">General tasks</p>
+          <h2>General To-Do List</h2>
+          <p className="muted">Use this for non-lecture tasks. Add free-text items, check them off, edit, delete, or move them up and down.</p>
+        </div>
+        <div className="score-badge">{openCount} open</div>
+      </div>
+
+      <div className="study-summary-grid todo-summary-grid">
+        <div className="stat-card"><span>Total tasks</span><strong>{todos.length}</strong></div>
+        <div className="stat-card"><span>Open</span><strong>{openCount}</strong></div>
+        <div className="stat-card"><span>Done</span><strong>{completedCount}</strong></div>
+        <div className="stat-card"><span>Completion</span><strong>{percent}%</strong></div>
+      </div>
+      <ProgressBar value={percent} />
+
+      <form className="todo-add-form" onSubmit={submitTodo}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a to-do item…" />
+        <button className="primary-btn">Add task</button>
+      </form>
+
+      <div className="todo-list">
+        {todos.length === 0 ? <p className="muted">No to-do items yet.</p> : todos.map((todo, index) => (
+          <article className={todo.done ? 'todo-row done' : 'todo-row'} key={todo.id}>
+            <label>
+              <input type="checkbox" checked={Boolean(todo.done)} onChange={() => onUpdate(todo.id, { done: !todo.done })} />
+              {editingId === todo.id ? (
+                <input value={editingText} onChange={(e) => setEditingText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(todo.id); }} />
+              ) : (
+                <span>{todo.text}</span>
+              )}
+            </label>
+            <div className="todo-actions">
+              {editingId === todo.id ? (
+                <>
+                  <button type="button" onClick={() => saveEdit(todo.id)}>Save</button>
+                  <button type="button" onClick={() => { setEditingId(''); setEditingText(''); }}>Cancel</button>
+                </>
+              ) : (
+                <button type="button" onClick={() => startEditing(todo)}>Edit</button>
+              )}
+              <button type="button" onClick={() => onMove(index, -1)} disabled={index === 0}>↑</button>
+              <button type="button" onClick={() => onMove(index, 1)} disabled={index === todos.length - 1}>↓</button>
+              <button type="button" className="danger-btn subtle" onClick={() => onDelete(todo.id)}>Delete</button>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -1919,9 +2697,19 @@ function findRecommendation(lectures, progress, selectedDate) {
 }
 
 
-function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLectures, overall, dayScore, recommendation, qbankDays, studySessions, widgets, onOpen }) {
+function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLectures, overall, dayScore, recommendation, qbankDays, studySessions, boardChecklist, todos, widgets, onOpen }) {
   const qbank = qbankTotals(qbankDays[selectedDate]);
   const studyTotals = studySessionTotals(studySessions, selectedDate);
+  const exams = examSummaries(lectures, progress);
+  const nextExam = exams.find((exam) => exam.days === null || exam.days >= 0) || exams[0];
+  const courseRows = courseBreakdownRows(lectures, progress).filter((row) => row.label !== 'No course');
+  const weakestCourse = courseRows[0];
+  const subjectRows = studyTimeBySubjectRows(studySessions, selectedDate);
+  const topSubject = subjectRows[0];
+  const estimateRows = smartStudyEstimateRows(lectures, progress, studySessions, selectedDate);
+  const estimateTotals = estimateTotalsForRows(estimateRows, selectedDate);
+  const boardStats = totalBoardChecklistStats(boardChecklist);
+  const openTodos = todos.filter((todo) => !todo.done).length;
   const visibleWidgets = widgets.filter((widget) => widget.enabled);
 
   const metrics = {
@@ -1944,6 +2732,36 @@ function FeatureHome({ selectedDate, lectures, progress, dayLectures, overdueLec
       eyebrow: 'Study time',
       metric: formatDuration(studyTotals.todaySeconds),
       detail: `${formatDuration(studyTotals.weekSeconds)} logged this week`
+    },
+    examPlanner: {
+      eyebrow: 'Exam planner',
+      metric: nextExam ? nextExam.exam : 'No exams',
+      detail: nextExam ? `${nextExam.percent}% ready · ${nextExam.days === null ? 'date missing' : nextExam.days < 0 ? 'past' : `${nextExam.days} days left`}` : 'Tag lectures with exam names'
+    },
+    courseBreakdown: {
+      eyebrow: 'Course analytics',
+      metric: `${courseRows.length} courses`,
+      detail: weakestCourse ? `Most behind: ${weakestCourse.label} (${weakestCourse.percent}%)` : 'Add courses with CSV import'
+    },
+    studyBySubject: {
+      eyebrow: 'Time analytics',
+      metric: topSubject ? topSubject.label : 'No sessions',
+      detail: topSubject ? `${formatDuration(topSubject.weekSeconds)} this week` : 'Log study sessions to populate this'
+    },
+    smartEstimator: {
+      eyebrow: 'Adaptive planning',
+      metric: formatDuration(estimateTotals.week),
+      detail: `${formatDuration(estimateTotals.today)} today · ${estimateRows.length} incomplete lectures estimated`
+    },
+    boardsChecklist: {
+      eyebrow: 'Board resources',
+      metric: `${boardStats.completedItems}/${boardStats.totalItems}`,
+      detail: `${percentFromParts(boardStats.completedItems, boardStats.totalItems)}% complete · ${formatDuration(boardStats.completedSeconds)} watched`
+    },
+    todoList: {
+      eyebrow: 'General tasks',
+      metric: `${openTodos} open`,
+      detail: `${todos.length} total to-do item${todos.length === 1 ? '' : 's'}`
     },
     progress: {
       eyebrow: 'Completion',
@@ -2037,6 +2855,8 @@ function Dashboard({ user, workspace }) {
   const [members, setMembers] = useState([]);
   const [qbankDays, setQbankDays] = useState({});
   const [studySessions, setStudySessions] = useState([]);
+  const [boardChecklist, setBoardChecklist] = useState({});
+  const [todos, setTodos] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const widgetKey = `medtracker:widgets:${user.uid}:${workspace.workspaceId}`;
   const themeKey = `medtracker:theme:${user.uid}`;
@@ -2128,6 +2948,29 @@ function Dashboard({ user, workspace }) {
     }, (err) => setDataError(err.message || 'Could not load study time logs.'));
   }, [workspace?.workspaceId, user.uid]);
 
+  useEffect(() => {
+    if (!workspace?.workspaceId) return undefined;
+    return onSnapshot(collection(db, 'workspaces', workspace.workspaceId, 'boardsChecklist'), (snapshot) => {
+      const next = {};
+      snapshot.docs.forEach((item) => {
+        const data = item.data();
+        if (data.userId === user.uid && data.resourceKey) next[data.resourceKey] = data;
+      });
+      setBoardChecklist(next);
+    }, (err) => setDataError(err.message || 'Could not load boards checklist.'));
+  }, [workspace?.workspaceId, user.uid]);
+
+  useEffect(() => {
+    if (!workspace?.workspaceId) return undefined;
+    return onSnapshot(collection(db, 'workspaces', workspace.workspaceId, 'todoItems'), (snapshot) => {
+      const next = snapshot.docs
+        .map((item) => ({ id: item.id, ...item.data() }))
+        .filter((item) => item.userId === user.uid)
+        .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0));
+      setTodos(next);
+    }, (err) => setDataError(err.message || 'Could not load to-do list.'));
+  }, [workspace?.workspaceId, user.uid]);
+
   const dates = useMemo(() => {
     const unique = Array.from(new Set(lectures.map((lecture) => lecture.date).filter(Boolean))).sort();
     return unique.length ? unique : [selectedDate];
@@ -2201,6 +3044,59 @@ function Dashboard({ user, workspace }) {
   async function deleteStudySession(sessionId) {
     if (!window.confirm('Delete this study session?')) return;
     await deleteDoc(doc(db, 'workspaces', workspace.workspaceId, 'studySessions', sessionId));
+  }
+
+
+  async function saveBoardResource(resourceKey, resourceData) {
+    await setDoc(doc(db, 'workspaces', workspace.workspaceId, 'boardsChecklist', `${user.uid}_${resourceKey}`), {
+      ...(boardChecklist[resourceKey] || {}),
+      ...resourceData,
+      userId: user.uid,
+      workspaceId: workspace.workspaceId,
+      resourceKey,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  }
+
+  async function addTodo(text) {
+    await addDoc(collection(db, 'workspaces', workspace.workspaceId, 'todoItems'), {
+      userId: user.uid,
+      workspaceId: workspace.workspaceId,
+      text,
+      done: false,
+      position: nextTodoPosition(todos),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  async function updateTodo(todoId, patch) {
+    await updateDoc(doc(db, 'workspaces', workspace.workspaceId, 'todoItems', todoId), {
+      ...patch,
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  async function deleteTodo(todoId) {
+    if (!window.confirm('Delete this to-do item?')) return;
+    await deleteDoc(doc(db, 'workspaces', workspace.workspaceId, 'todoItems', todoId));
+  }
+
+  async function moveTodo(index, delta) {
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= todos.length) return;
+    const first = todos[index];
+    const second = todos[nextIndex];
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'workspaces', workspace.workspaceId, 'todoItems', first.id), {
+      position: Number(second.position) || nextIndex + 1,
+      updatedAt: serverTimestamp()
+    });
+    batch.update(doc(db, 'workspaces', workspace.workspaceId, 'todoItems', second.id), {
+      position: Number(first.position) || index + 1,
+      updatedAt: serverTimestamp()
+    });
+    await batch.commit();
   }
 
   function moveDay(delta) {
@@ -2287,6 +3183,8 @@ function Dashboard({ user, workspace }) {
           recommendation={recommendation}
           qbankDays={qbankDays}
           studySessions={studySessions}
+          boardChecklist={boardChecklist}
+          todos={todos}
           widgets={widgets}
           onOpen={setActiveFeature}
         />
@@ -2295,7 +3193,13 @@ function Dashboard({ user, workspace }) {
     if (activeFeature === 'todayPlan') return <TodayPlan selectedDate={selectedDate} lectures={lectures} progress={progress} overdueLectures={overdueLectures} recommendation={recommendation} onSelectDate={setSelectedDate} />;
     if (activeFeature === 'pomodoro') return <PomodoroTimer lectures={lectures} selectedDate={selectedDate} />;
     if (activeFeature === 'qbank') return <DrStephensBoardsTracker selectedDate={selectedDate} qbankDays={qbankDays} onSave={saveQbankDay} />;
-    if (activeFeature === 'studyTime') return <StudyTimeLogger selectedDate={selectedDate} studySessions={studySessions} onSave={saveStudySession} onDelete={deleteStudySession} />;
+    if (activeFeature === 'studyTime') return <StudyTimeLogger selectedDate={selectedDate} lectures={lectures} studySessions={studySessions} onSave={saveStudySession} onDelete={deleteStudySession} />;
+    if (activeFeature === 'examPlanner') return <ExamPlanner lectures={lectures} progress={progress} onSelectDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
+    if (activeFeature === 'courseBreakdown') return <CourseBreakdown lectures={lectures} progress={progress} />;
+    if (activeFeature === 'studyBySubject') return <StudyTimeBySubject selectedDate={selectedDate} studySessions={studySessions} />;
+    if (activeFeature === 'smartEstimator') return <SmartStudyTimeEstimator selectedDate={selectedDate} lectures={lectures} progress={progress} studySessions={studySessions} onSelectDate={(date) => { setSelectedDate(date); setActiveFeature('selectedDay'); }} />;
+    if (activeFeature === 'boardsChecklist') return <BoardsChecklist boardChecklist={boardChecklist} onSaveResource={saveBoardResource} />;
+    if (activeFeature === 'todoList') return <GeneralTodoList todos={todos} onAdd={addTodo} onUpdate={updateTodo} onDelete={deleteTodo} onMove={moveTodo} />;
     if (activeFeature === 'progress') return <ProgressBreakdown lectures={lectures} progress={progress} />;
     if (activeFeature === 'weeklyView') return <WeeklyView selectedDate={selectedDate} lectures={lectures} progress={progress} onSelectDate={setSelectedDate} onDropLecture={handleDropLecture} onDragStart={handleDragStart} />;
     if (activeFeature === 'weeklyReport') return <WeeklyReport selectedDate={selectedDate} lectures={lectures} progress={progress} />;

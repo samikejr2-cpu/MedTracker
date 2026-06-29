@@ -1563,3 +1563,568 @@ button,
     width: 100%;
   }
 }
+
+/* Exam planner, course analytics, and study time analytics */
+.planner-panel,
+.course-panel,
+.study-subject-panel {
+  overflow: hidden;
+}
+
+.exam-planner-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 1rem;
+}
+
+.exam-planner-card,
+.course-breakdown-card,
+.study-subject-row {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.62));
+  border-radius: 22px;
+  padding: 1rem;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+}
+
+.exam-planner-top,
+.course-card-head,
+.study-subject-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.exam-planner-top h3,
+.course-card-head h3 {
+  margin: 0.15rem 0;
+}
+
+.exam-planner-top span,
+.course-card-head small,
+.study-subject-row small,
+.exam-course-list small,
+.unfinished-list small {
+  color: var(--muted);
+}
+
+.readiness-circle {
+  flex: 0 0 auto;
+  width: 82px;
+  height: 82px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.18), rgba(15, 23, 42, 0.82));
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.readiness-circle strong {
+  display: block;
+  font-size: 1.25rem;
+}
+
+.readiness-circle span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: -0.65rem;
+}
+
+.pass-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.pass-mini-grid > div,
+.report-grid.study-summary-grid > div {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  padding: 0.75rem;
+  background: rgba(2, 6, 23, 0.26);
+}
+
+.pass-mini-grid span,
+.pass-mini-grid small,
+.report-grid.study-summary-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.pass-mini-grid strong,
+.report-grid.study-summary-grid strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+}
+
+.exam-course-list,
+.unfinished-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.compact-progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.compact-progress-row .progress-wrap {
+  grid-column: 1 / -1;
+}
+
+.unfinished-list button {
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  padding: 0.7rem;
+  background: rgba(15, 23, 42, 0.62);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.unfinished-list button:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.unfinished-list button span,
+.unfinished-list button small {
+  display: block;
+}
+
+.course-breakdown-list,
+.study-subject-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.course-card-head strong {
+  font-size: 1.5rem;
+  color: var(--accent);
+}
+
+.course-passes {
+  margin-bottom: 0;
+}
+
+.study-subject-row {
+  align-items: center;
+}
+
+.study-subject-row > div:first-child {
+  min-width: 0;
+}
+
+.study-subject-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.study-subject-meter {
+  min-width: 190px;
+  display: grid;
+  gap: 0.4rem;
+  text-align: right;
+}
+
+.study-summary-grid {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .exam-planner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-planner-top,
+  .course-card-head,
+  .study-subject-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .readiness-circle {
+    width: 74px;
+    height: 74px;
+  }
+
+  .pass-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .study-subject-meter {
+    min-width: 0;
+    text-align: left;
+  }
+}
+
+/* Smart Study Time Estimator */
+.study-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.estimator-panel {
+  overflow: hidden;
+}
+
+.estimator-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.estimator-explain-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  margin: 0 0 1rem;
+  border-radius: 18px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.20);
+}
+
+.estimator-explain-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.estimator-explain-card small {
+  color: var(--muted);
+}
+
+.estimator-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.estimator-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.58));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
+}
+
+.estimator-main {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.estimator-main span,
+.estimator-main small {
+  color: var(--muted);
+}
+
+.estimator-main strong {
+  overflow-wrap: anywhere;
+}
+
+.estimator-metric {
+  flex: 0 0 180px;
+  display: grid;
+  justify-items: end;
+  gap: 0.45rem;
+  text-align: right;
+}
+
+.estimator-metric > strong {
+  color: var(--accent);
+  font-size: 1.35rem;
+}
+
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.confidence-pill.high {
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.confidence-pill.medium {
+  color: var(--orange);
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.28);
+}
+
+.confidence-pill.low {
+  color: var(--muted);
+}
+
+@media (max-width: 780px) {
+  .study-meta-grid,
+  .estimator-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .estimator-row {
+    flex-direction: column;
+  }
+
+  .estimator-metric {
+    width: 100%;
+    flex: auto;
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .estimator-metric button {
+    width: 100%;
+  }
+}
+
+/* Boards Checklist + General To-Do additions */
+.boards-checklist-panel,
+.todo-panel {
+  overflow: hidden;
+}
+
+.boards-overall-grid,
+.todo-summary-grid {
+  margin-bottom: 1rem;
+}
+
+.boards-resource-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.boards-resource-tab {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.62);
+  color: var(--text);
+  border-radius: 18px;
+  padding: 0.9rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  cursor: pointer;
+  min-height: 82px;
+}
+
+.boards-resource-tab span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.boards-resource-tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.15), 0 14px 40px rgba(15, 23, 42, 0.28);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(124, 58, 237, 0.12));
+}
+
+.boards-active-card {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 1rem;
+}
+
+.boards-active-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 340px);
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.boards-stat-stack {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.boards-stat-stack > div {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  padding: 0.8rem;
+  background: rgba(2, 6, 23, 0.25);
+}
+
+.boards-stat-stack span,
+.boards-stat-stack strong {
+  display: block;
+}
+
+.boards-stat-stack span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.boards-search-label {
+  display: block;
+  margin: 0 0 1rem;
+}
+
+.boards-checklist-table {
+  display: grid;
+  gap: 0.65rem;
+  max-height: min(72vh, 780px);
+  overflow: auto;
+  padding-right: 0.35rem;
+}
+
+.boards-checklist-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.9fr);
+  gap: 0.75rem;
+  align-items: stretch;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.54);
+}
+
+.boards-checklist-row.done {
+  border-color: rgba(34, 197, 94, 0.34);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.boards-check-main {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: 0;
+}
+
+.boards-check-main input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.boards-check-main strong,
+.boards-check-main small {
+  display: block;
+}
+
+.boards-check-main small {
+  color: var(--muted);
+  margin-top: 0.25rem;
+  line-height: 1.4;
+}
+
+.boards-checklist-row textarea {
+  min-height: 72px;
+  resize: vertical;
+  font-size: 16px;
+}
+
+.todo-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.todo-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.todo-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.todo-row.done {
+  opacity: 0.72;
+}
+
+.todo-row.done span {
+  text-decoration: line-through;
+}
+
+.todo-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.todo-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.todo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+
+.todo-actions button {
+  min-height: 38px;
+}
+
+@media (max-width: 850px) {
+  .boards-active-header,
+  .boards-checklist-row,
+  .todo-row,
+  .todo-add-form {
+    grid-template-columns: 1fr;
+  }
+
+  .boards-resource-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .boards-checklist-table {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .todo-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .boards-resource-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .boards-active-card,
+  .boards-checklist-row,
+  .todo-row {
+    border-radius: 16px;
+    padding: 0.7rem;
+  }
+}

@@ -1,45 +1,77 @@
-# MedTracker Study Time Log Patch
+# MedTracker Patch: Adaptive Analytics + Boards Checklist + General To-Do List
 
-This patch adds the Study Time Log feature and corrects the Board checklist labels.
+This patch keeps the adaptive estimator and analytics features and adds:
 
-## Updates
+1. Exam Planner
+2. Course Breakdown
+3. Study Time by Subject
+4. Smart Study Time Estimator
+5. Boards Checklist from `Boards Blank Copy.xlsx`
+6. General To-Do List
 
-1. Board checklist labels now show:
-   - Board Video/Resource
-   - Question Bank Set?
+## Files included in the changed-files patch
 
-2. New Study Time Log feature:
-   - Integrated timer with Start / Pause / Reset
-   - Quick-add buttons for +15, +30, +60 minutes
-   - Subject / lecture text field
-   - Notes text field
-   - Date selector and calendar date picker
-   - Saves study sessions to Firebase
-   - Shows selected-day total, weekly total, and all-time total
-   - Shows saved study sessions for the selected date
-   - Allows deleting saved study sessions
+Upload these to the root of the GitHub repo:
 
-## Install
+- `src/`
+- `firestore.rules`
+- `PATCH_INSTRUCTIONS.md`
 
-1. Upload these files/folders into the root of your GitHub repo:
-   - src
-   - firestore.rules
-   - PATCH_INSTRUCTIONS.md
+## New Boards Checklist feature
 
-2. Commit changes.
+Adds a homepage feature titled **Boards Checklist**.
 
-3. In Firebase, publish the included firestore.rules if you are using stricter rules.
+It includes resource buttons for:
 
-4. In Netlify, redeploy using:
-   - Deploys → Trigger deploy → Clear cache and deploy site
+- Boards and Beyond
+- Sketchy Micro
+- Sketchy Pharm
+- Sketchy Path
+- First Aid
+- Pathoma
+- Pixorize
+- Physeo
+- Goljan
+- FA
 
-5. Open https://medltracker.netlify.app and hard refresh.
+Each resource has:
 
-## Netlify reminder
+- Full checklist rows extracted from the uploaded workbook
+- Checkbox per row
+- Editable free-text notes per row
+- Percent completed
+- Percent of video/audio time completed when duration data exists
+- Total watched time and total listed time
+- Search inside each resource
 
-If Netlify secret scanning fails, make sure these environment variables exist:
+## New General To-Do List feature
 
-SECRETS_SCAN_OMIT_KEYS=VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_STORAGE_BUCKET,VITE_FIREBASE_MESSAGING_SENDER_ID,VITE_FIREBASE_APP_ID
-SECRETS_SCAN_OMIT_PATHS=node_modules/**
-SECRETS_SCAN_SMART_DETECTION_ENABLED=false
-SECRETS_SCAN_ENABLED=false
+Adds a homepage feature titled **General To-Do List**.
+
+It includes:
+
+- Free-text task entry
+- Checkbox completion
+- Edit task
+- Delete task
+- Move task up/down
+- Completion statistics
+
+## Firestore rules
+
+This patch adds two workspace subcollections:
+
+- `boardsChecklist`
+- `todoItems`
+
+If your current Firebase rules are strict, publish the included `firestore.rules` file in Firebase:
+
+Firebase Console → Firestore Database → Rules → paste contents → Publish
+
+## Netlify deploy
+
+After uploading to GitHub:
+
+Netlify → Deploys → Trigger deploy → Clear cache and deploy site
+
+Keep your existing Netlify secrets-scan variables if they were needed previously.
