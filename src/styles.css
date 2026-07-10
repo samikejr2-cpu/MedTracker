@@ -96,6 +96,65 @@ input:focus { border-color: rgba(96,165,250,.8); box-shadow: 0 0 0 3px rgba(59,1
 .check-chip { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: rgba(30,41,59,.44); color: #dbeafe; }
 .check-chip input { width: 18px; height: 18px; accent-color: #22c55e; }
 .check-chip.checked { background: rgba(34,197,94,.11); border-color: rgba(34,197,94,.35); color: #dcfce7; }
+.check-chip span { flex: 1; min-width: 0; }
+.check-chip-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+}
+.check-chip .task-date-input {
+  width: 142px;
+  min-width: 132px;
+  height: 38px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+
+.task-drag-handle {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent);
+  font-weight: 900;
+  cursor: grab;
+  padding: 0;
+}
+
+.task-drag-handle:active {
+  cursor: grabbing;
+}
+
+.task-drag-handle.editor-handle {
+  align-self: center;
+}
+
+.check-chip-main span {
+  display: grid;
+  gap: 2px;
+}
+
+.check-chip-main span strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.check-chip-main span small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+.small-note {
+  font-size: 13px;
+  margin: 8px 0 0;
+}
 
 .import-grid { display: grid; grid-template-columns: minmax(260px, .9fr) minmax(320px, 1.1fr); gap: 16px; }
 .upload-box { min-height: 210px; border: 1px dashed rgba(148,163,184,.45); border-radius: 20px; display: grid; place-items: center; text-align: center; padding: 24px; background: rgba(2,6,23,.38); cursor: pointer; }
@@ -182,9 +241,66 @@ input:focus { border-color: rgba(96,165,250,.8); box-shadow: 0 0 0 3px rgba(59,1
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
 }
 
+.checklist-editor {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgba(2, 6, 23, 0.34);
+}
+
+.checklist-editor h4 {
+  margin: 0.15rem 0 0;
+}
+
+.checklist-editor-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.checklist-editor-row,
+.add-task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.checklist-editor-row {
+  padding: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 0.9rem;
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.checklist-editor-row.hidden {
+  opacity: 0.62;
+}
+
+.checklist-editor-row strong,
+.checklist-editor-row small {
+  display: block;
+}
+
+.checklist-editor-row small {
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
 @media (max-width: 700px) {
   .inline-actions {
     display: grid;
+  }
+  .check-chip {
+    flex-wrap: wrap;
+  }
+  .check-chip .task-date-input {
+    width: 100%;
+  }
+  .checklist-editor-row,
+  .add-task-row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -332,6 +448,74 @@ select:focus, textarea:focus {
 .week-items { display: grid; gap: 8px; }
 .week-mini { cursor: grab; }
 .week-mini:active { cursor: grabbing; }
+
+.daily-study-drop-panel {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 18px;
+  padding: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 20px;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.daily-study-drop-heading h3 {
+  margin: 0 0 6px;
+}
+
+.daily-study-drop-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.daily-drop-date {
+  min-width: 140px;
+  border: 1px dashed rgba(148, 163, 184, 0.32);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.48);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.daily-drop-date.active {
+  border-color: rgba(96, 165, 250, 0.72);
+  background: rgba(59, 130, 246, 0.13);
+}
+
+.daily-drop-date:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+
+.daily-drop-date button {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.daily-drop-date button span,
+.daily-drop-date button small {
+  color: var(--muted);
+}
+
+.daily-drop-date em {
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.09);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 900;
+}
 .productivity-preview-row { grid-template-columns: 145px 105px 105px 130px minmax(220px,1fr) 150px 110px 42px; }
 .report-panel strong { display: block; margin-top: 5px; }
 .plan-panel .overdue-card { cursor: pointer; }
@@ -349,6 +533,10 @@ select:focus, textarea:focus {
   .productivity-preview-row input:nth-child(5), .productivity-preview-row input:nth-child(6) { grid-column: 1 / -1; }
   .overdue-row { grid-template-columns: 1fr; }
   .week-grid { grid-template-columns: repeat(7, 235px); }
+  .daily-study-drop-grid { grid-template-columns: repeat(7, 190px); }
+  .check-chip { align-items: flex-start; }
+  .check-chip .task-date-input { width: 100%; min-width: 0; }
+  .exact-time-row.single-exact-field { grid-template-columns: 1fr; }
 }
 
 
@@ -996,6 +1184,17 @@ textarea { resize: vertical; min-height: 84px; }
   color: var(--text);
   background: linear-gradient(180deg, rgba(15,23,42,.58), rgba(2,6,23,.36));
   box-shadow: 0 14px 34px rgba(0,0,0,.2);
+  cursor: grab;
+}
+
+.home-feature-card:active {
+  cursor: grabbing;
+}
+
+.home-feature-card.dragging {
+  opacity: 0.58;
+  border-style: dashed;
+  transform: scale(0.99);
 }
 
 .home-feature-card strong {
@@ -1501,6 +1700,22 @@ button,
   font-variant-numeric: tabular-nums;
 }
 
+.exact-time-row {
+  width: min(620px, 100%);
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.exact-time-row label {
+  text-align: left;
+}
+
+.exact-time-row.single-exact-field {
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
 .compact-buttons {
   justify-content: center;
   flex-wrap: wrap;
@@ -1552,6 +1767,10 @@ button,
 
 @media (max-width: 760px) {
   .study-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exact-time-row {
     grid-template-columns: 1fr;
   }
 
